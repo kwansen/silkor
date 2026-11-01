@@ -9,6 +9,8 @@ export interface TextEditorOptions {
   onInput?: (text: Text) => void
   // 编辑框创建完成回调，供外部直接监听编辑框事件（如 Tab/Enter 新建节点）
   onEditStart?: (el: HTMLDivElement, text: Text) => void
+  // 点击文本节点回调（仅激活不编辑，编辑由外部通过 start 主动触发）
+  onActivate?: (text: Text) => void
 }
 
 // 文本编辑插件：点击文本进入编辑，输入实时同步，失焦自动保存
@@ -37,10 +39,10 @@ export class TextEditor implements Plugin {
     }
   }
 
-  // 递归为节点树中的文本节点绑定点击事件
+  // 递归为节点树中的文本节点绑定点击事件（仅通知激活，不直接进入编辑）
   private bindText(node: Node, app: App) {
     if (node instanceof Text) {
-      node.onClick = () => this.start(node)
+      node.onClick = () => this.options.onActivate?.(node)
     }
     node.children.forEach(child => this.bindText(child, app))
   }
@@ -68,6 +70,11 @@ export class TextEditor implements Plugin {
     // 平移视口而非节点坐标，保持布局数据不变并触发编辑框对齐
     app.renderer.setViewport({ ...vp, x: vp.x + dx, y: vp.y + dy })
     app.render()
+  }
+
+  // 是否正在编辑（供外部区分编辑态与激活态，编辑态下外部不应拦截方向键等按键）
+  get isEditing() {
+    return this.el !== null
   }
 
   // 公开编辑方法：创建编辑框覆盖在文本上开始编辑（供外部手动进入编辑）

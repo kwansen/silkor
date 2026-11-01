@@ -1,5 +1,4 @@
 import { Node, type NodeOptions } from '../Node'
-import { prepareWithSegments, layoutWithLines, type PreparedTextWithSegments } from '@chenglou/pretext'
 
 type Padding = number | [number] | [number, number] | [number, number, number] | [number, number, number, number]
 
@@ -58,9 +57,24 @@ export class Text extends Node {
   // 字体度量缓存，供 drawText 定位使用
   private boxAscent = 0
   private boxDescent = 0
-  private prepared: PreparedTextWithSegments | null = null
-  private preparedText = ''
-  private preparedFont = ''
+  // 隐藏 DOM 测量元素：canvas 与编辑覆盖层共用浏览器排版引擎的断行结果，保证逐行一致
+  private static measurer: HTMLDivElement | null = null
+
+  private static getMeasurer(): HTMLDivElement {
+    if (!Text.measurer) {
+      const el = document.createElement('div')
+      el.style.position = 'absolute'
+      el.style.visibility = 'hidden'
+      el.style.left = '-99999px'
+      el.style.top = '0'
+      el.style.whiteSpace = 'pre-wrap'
+      // 编辑覆盖层是 contenteditable（Blink 编辑宿主默认 overflow-wrap: break-word），此处保持一致
+      el.style.overflowWrap = 'break-word'
+      document.body.appendChild(el)
+      Text.measurer = el
+    }
+    return Text.measurer
+  }
 
   constructor(options: TextOptions = {}) {
     super(options)
@@ -80,13 +94,20 @@ export class Text extends Node {
     this.measure()
   }
 
-  // 基于离屏画布测量并更新宽高、行数与字体度量，供构造与外部重新测量复用
+  // 基于隐藏 DOM 元素测量并更新宽高、行数与字体度量，供构造与外部重新测量复用
   measure() {
     const ctx = this.measureCtx
     ctx.font = `${this.fontWeight} ${this.fontSize}px ${this.fontFamily}`
     this.boxAscent = ctx.measureText(this.text).fontBoundingBoxAscent
     this.boxDescent = ctx.measureText(this.text).fontBoundingBoxDescent
     const { paddingTop: pt, paddingRight: pr, paddingBottom: pb, paddingLeft: pl } = this
+    const measurer = Text.getMeasurer()
+    measurer.style.font = `${this.fontWeight} ${this.fontSize}px ${this.fontFamily}`
+    // 单行宽度用 DOM max-content 测量，与编辑覆盖层的 max-content 宽度完全一致
+    measurer.style.whiteSpace = 'pre'
+    measurer.style.width = 'max-content'
+    measurer.textContent = this.text
+    const textWidth = measurer.getBoundingClientRect().width
     if (this.autoWidth && !this.wrap) {
       // 分支一：自动宽度且不自动换行
 
@@ -94,13 +115,11 @@ export class Text extends Node {
         // 子分支一A：存在宽度范围，宽度钳制在最小/最大范围内
 
         const [minWidth, maxWidth] = this.widthRange
-        const textWidth = ctx.measureText(this.text).width + pl + pr
-        this.width = Math.min(Math.max(textWidth, minWidth), maxWidth)
+        this.width = Math.min(Math.max(textWidth + pl + pr, minWidth), maxWidth)
         this.lines = [this.text]
       } else {
         // 子分支一B：无宽度范围，按文本实际宽度计算
 
-        const textWidth = ctx.measureText(this.text).width
         this.width = textWidth + pl + pr
         this.lines = [this.text]
       }
@@ -111,21 +130,20 @@ export class Text extends Node {
         // 子分支二A：存在宽度范围
 
         const [boxMinWidth, boxMaxWidth] = this.widthRange
-        const textMaxWidth = Math.max(0, boxMaxWidth - pl - pr)
-        const lines = this.wrapText(this.text, textMaxWidth)
+        const contentWidth = Math.max(0, boxMaxWidth - pl - pr)
+        measurer.style.whiteSpace = 'pre-wrap'
+        measurer.style.width = `${contentWidth}px`
+        measurer.textContent = this.text
+        const lines = this.domWrapLines(measurer, this.text)
         if (lines.length === 1) {
-          this.width = Math.min(
-            Math.max(lines[0].width + pl + pr, boxMinWidth),
-            boxMaxWidth
-          )
+          this.width = Math.min(Math.max(textWidth + pl + pr, boxMinWidth), boxMaxWidth)
         } else {
           this.width = boxMaxWidth
         }
-        this.lines = lines.map(line => line.text)
+        this.lines = lines
       } else {
         // 子分支二B：没有范围就无法自动换行
 
-        const textWidth = ctx.measureText(this.text).width
         this.width = textWidth + pl + pr
         this.height = this.fontSize * this.lineHeight
         this.lines = [this.text]
@@ -137,9 +155,11 @@ export class Text extends Node {
     } else if (!this.autoWidth && this.wrap) {
       // 分支四：非自动宽度且自动换行
 
-      const textMaxWidth = Math.max(0, this.width - pl - pr)
-      const lines = this.wrapText(this.text, textMaxWidth)
-      this.lines = lines.map((line) => line.text)
+      const contentWidth = Math.max(0, this.width - pl - pr)
+      measurer.style.whiteSpace = 'pre-wrap'
+      measurer.style.width = `${contentWidth}px`
+      measurer.textContent = this.text
+      this.lines = this.domWrapLines(measurer, this.text)
     }
     // 空文本兜底为单行高度，避免塌缩；括号确保行数先兜底再乘行高
     this.height = (this.lines.length || 1) * this.fontSize * this.lineHeight + pt + pb
@@ -151,23 +171,26 @@ export class Text extends Node {
     this.drawText(ctx)
   }
 
-  private wrapText(
-    text: string,
-    maxWidth: number,
-  ) {
-    const font = `${this.fontWeight} ${this.fontSize}px ${this.fontFamily}`
-    // 缓存 prepare 结果，文本或字体变化时才重新测量
-    if (
-      !this.prepared ||
-      this.preparedText !== text ||
-      this.preparedFont !== font
-    ) {
-      this.prepared = prepareWithSegments(text, font, { whiteSpace: 'pre-wrap' })
-      this.preparedText = text
-      this.preparedFont = font
+  // 逐字符扫描光标矩形，按行盒 top 变化切分出浏览器的真实换行位置
+  private domWrapLines(el: HTMLDivElement, text: string): string[] {
+    if (!text) return ['']
+    const node = el.firstChild!
+    const lines: string[] = []
+    let start = 0
+    let lastTop: number | null = null
+    for (let i = 0; i < text.length; i++) {
+      const range = document.createRange()
+      range.setStart(node, i)
+      range.setEnd(node, i + 1)
+      const top: number | null | undefined = range.getClientRects()[0]?.top ?? lastTop
+      if (lastTop !== null && top !== null && Math.abs(top - lastTop) > 1) {
+        lines.push(text.slice(start, i))
+        start = i
+      }
+      lastTop = top
     }
-    const { lines } = layoutWithLines(this.prepared, maxWidth, this.fontSize * this.lineHeight)
-    return lines.map((line) => ({ text: line.text, width: line.width }))
+    lines.push(text.slice(start))
+    return lines
   }
 
   private normalizePadding(

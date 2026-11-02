@@ -80,24 +80,26 @@ export class TextEditor implements Plugin {
   }
 
   // 公开编辑方法：创建编辑框覆盖在文本上开始编辑（供外部手动进入编辑）
-  // passive 为 true 时进入激活态：光标与选区透明（视觉等同节点），打字/点击后由外部唤醒为编辑态
+  // passive 为 true 时进入激活态（飞书模型）：覆盖层保持为空、文字仍由 canvas 渲染（视觉与未激活
+  // 完全一致），光标与选区透明；打字/点击后由 beginEdit 唤醒为编辑态，覆盖层才接管文字渲染
   start(text: Text, options: { passive?: boolean } = {}) {
     if (!this.app) return
     const app = this.app
     this.stop(app)
     this.text = text
-    // 覆盖层接管文字渲染：canvas 只画盒子，避免两层文字叠加变粗（含 passive 激活态）
-    text.textHidden = true
+    // 临时诊断日志（复现问题后移除）
+    console.log('[SilkerEditor] start passive=', !!options.passive, 'nodeText=', JSON.stringify(text.text))
+    // 仅编辑态（直接进入编辑）需要覆盖层接管文字渲染；激活态保持 canvas 绘制文字
+    if (!options.passive) text.textHidden = true
     const el = this.view.create(text, options.passive ?? false)
     this.bindEvents(el, text, app)
     document.body.appendChild(el)
     this.el = el
     this.syncPosition(app)
-    // 立即重绘一次，让 canvas 跳过该节点文字，否则覆盖层显示前 canvas 旧文字仍在
     app.render()
     if (options.passive) {
-      // 激活态全选内容：首个输入字符将替换全部旧文本，IME 组合同样落在该覆盖层上
-      this.focusSelectAll(el)
+      // 激活态仅聚焦空覆盖层（文字由 canvas 渲染），打字/点击由 beginEdit 唤醒
+      el.focus()
     } else {
       this.focusAtEnd(el)
     }
@@ -109,7 +111,18 @@ export class TextEditor implements Plugin {
   // 绑定输入与失焦事件：输入同步文本并重渲染
   // 失焦不移除覆盖层（虚拟 text 常驻可编辑，passive 仅是视觉样式），只切回激活态外观并通知外部
   private bindEvents(el: HTMLDivElement, text: Text, app: App) {
-    el.addEventListener('input', () => {
+    // 右键菜单粘贴不经过 keydown：粘贴前先唤醒为编辑态（填入文本、canvas 停止渲染文字），
+    // 剪贴板内容随后追加在光标处
+    el.addEventListener('paste', () => {
+      // 临时诊断日志（复现问题后移除）
+      console.log('[SilkerEditor] paste -> beginEdit')
+      this.beginEdit()
+    })
+    el.addEventListener('input', (e) => {
+      // 临时诊断日志（复现问题后移除）
+      console.log('[SilkerEditor] input passive=', el.classList.contains('silker-text-passive'), 'inputType=', (e as InputEvent).inputType, 'el=', JSON.stringify(el.textContent), 'nodeText=', JSON.stringify(text.text))
+      // 激活态（文字透明）下的意外 input 不同步内容，唤醒后的输入才经此处同步节点文本
+      if (el.classList.contains('silker-text-passive')) return
       // text 赋值走 accessor 自动重测，绘制即同步新内容
       text.text = el.textContent || ''
       app.render()
@@ -119,12 +132,30 @@ export class TextEditor implements Plugin {
       this.options.onInput?.(text)
     })
     el.addEventListener('blur', () => {
-      // 覆盖层可能已在节点切换中被移除，仅对仍在文档中的元素切回激活态视觉
+      // 覆盖层可能已在节点切换中被移除，仅对仍在文档中的元素切回激活态视觉（文字交还 canvas）
       if (el.isConnected) {
-        el.classList.add('silker-text-passive')
+        this.toPassiveVisual(false)
         this.options.onEditEnd?.()
       }
     })
+  }
+
+  // 唤醒为编辑态（飞书模型）：canvas 停止渲染文字、切编辑态尺寸。fill 为 true（点击进入）时把
+  // 节点文本填入覆盖层做正常编辑；为 false（打字/IME/粘贴进入）时保持空覆盖层，输入内容经 input
+  // 同步替换节点文本。填充只发生在点击路径（无组合进行中）—— 组合窗口内程序化改写内容/选区会
+  // 污染 Chromium 的 IME 组合会话（已填内容被当作组合文本重放，导致节点文本复制一份）
+  beginEdit(fill = false) {
+    const el = this.el
+    if (!el || !this.text || !this.app) return
+    if (el.classList.contains('silker-text-passive')) {
+      el.classList.remove('silker-text-passive')
+      el.style.color = this.text.fill
+      if (fill) el.textContent = this.text.text
+      this.view.applyEditModeSize(el, this.text)
+      this.text.textHidden = true
+      this.app.render()
+    }
+    if (document.activeElement !== el) el.focus()
   }
 
   // 供外部为新增节点绑定点击编辑（如 Tab/Enter 创建的节点）
@@ -143,16 +174,30 @@ export class TextEditor implements Plugin {
     return this.el !== null && document.activeElement === this.el
   }
 
-  // 重新聚焦常驻覆盖层并全选内容：打字/IME 的默认输入直接落在其上，不吞任何键
+  // 重新聚焦常驻覆盖层并进入编辑态：打字/IME 的默认输入直接落在其上，不吞任何键
   focusForTyping() {
-    if (this.el) this.focusSelectAll(this.el)
+    this.beginEdit()
   }
 
-  // 提交（Enter/Escape）：切回激活态视觉并全选，覆盖层保持挂载可编辑，IME 不被打断
+  // 提交（Enter/Escape）：切回激活态视觉（清空覆盖层、文字交还 canvas 渲染），
+  // 覆盖层保持挂载可编辑，IME 不被打断
   enterPassive() {
-    if (!this.el) return
-    this.el.classList.add('silker-text-passive')
-    this.focusSelectAll(this.el)
+    this.toPassiveVisual(true)
+  }
+
+  // 切回激活态视觉：清空覆盖层（回到空输入缓冲）、恢复 canvas 文字绘制与节点盒尺寸（focus 为 true 时重新聚焦）
+  private toPassiveVisual(focus: boolean) {
+    const el = this.el
+    if (!el || !this.text || !this.app) return
+    // 临时诊断日志（复现问题后移除）
+    console.log('[SilkerEditor] toPassiveVisual focus=', focus)
+    el.classList.add('silker-text-passive')
+    el.textContent = ''
+    el.style.color = 'transparent'
+    this.text.textHidden = false
+    this.view.applyPassiveSize(el, this.text)
+    this.app.render()
+    if (focus) el.focus()
   }
 
   // 内部对齐：按当前视口把编辑框覆盖到节点上
@@ -182,17 +227,6 @@ export class TextEditor implements Plugin {
     }
   }
 
-  // 聚焦并全选内容（首个输入字符或 IME 组合将替换全部旧文本）
-  private focusSelectAll(el: HTMLDivElement) {
-    el.focus()
-    const range = document.createRange()
-    range.selectNodeContents(el)
-    const sel = window.getSelection()
-    if (sel) {
-      sel.removeAllRanges()
-      sel.addRange(range)
-    }
-  }
 
   // 移除编辑元素并重新渲染（先置空引用，避免 remove 触发 blur 递归重复移除）
   private stop(app: App) {

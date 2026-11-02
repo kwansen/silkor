@@ -17,16 +17,24 @@ export class TextEditorView {
     TextEditorView.styleInjected = true;
   }
 
-  // passive 为 true 时创建激活态覆盖层：光标与选区透明，视觉完全由 canvas 节点呈现，打字后由外部移除该类恢复编辑态
+  // passive 为 true 时创建激活态覆盖层：保持为空，文字仍由 canvas 渲染（视觉与未激活完全一致）。
+  // 覆盖层本身是输入缓冲区：打字唤醒后从空开始输入、经 input 同步替换节点文本；点击唤醒时才由
+  // beginEdit 填入节点文本做正常编辑。唤醒过程不改写内容与选区（组合窗口内的改写会污染 IME 组合会话）
   create(text: Text, passive = false): HTMLDivElement {
     TextEditorView.ensurePassiveStyle();
     const el = document.createElement("div");
     el.contentEditable = "true";
-    el.textContent = text.text;
+    el.spellcheck = false;
+    if (!passive) el.textContent = text.text;
     this.applyBaseStyle(el, text);
     this.applyTextStyle(el, text);
     this.applyWrapStyle(el, text);
-    this.applySizeStyle(el, text);
+    if (passive) {
+      this.applyPassiveSize(el, text);
+      el.style.color = "transparent";
+    } else {
+      this.applySizeStyle(el, text);
+    }
     this.applyPadding(el, text);
     // 基础类始终存在（覆盖 UA 样式表的 :focus-visible 焦点环），passive 再叠加激活态类
     el.className = "silker-text-editor";
@@ -57,6 +65,18 @@ export class TextEditorView {
   // 应用是否自动换行的样式
   private applyWrapStyle(el: HTMLDivElement, text: Text) {
     el.style.whiteSpace = text.wrap ? "pre-wrap" : "pre";
+  }
+
+  // 激活态尺寸：定宽高为节点盒，保证空覆盖层的可点击/可聚焦区域与节点完全重合
+  applyPassiveSize(el: HTMLDivElement, text: Text) {
+    el.style.width = `${text.width}px`;
+    el.style.height = `${text.height}px`;
+  }
+
+  // 唤醒为编辑态时恢复编辑模式尺寸：宽度按宽度范围跟随内容，高度交回内容自适应
+  applyEditModeSize(el: HTMLDivElement, text: Text) {
+    el.style.height = "";
+    this.applySizeStyle(el, text);
   }
 
   // 根据 autoWidth 与宽度范围应用宽度样式

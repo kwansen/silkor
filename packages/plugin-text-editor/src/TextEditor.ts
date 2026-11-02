@@ -179,6 +179,12 @@ export class TextEditor implements Plugin {
     this.beginEdit()
   }
 
+  // 取消激活：移除常驻覆盖层并交还 canvas 文字渲染（激活态与编辑态一并清除）
+  deactivate() {
+    if (!this.app) return
+    this.stop(this.app)
+  }
+
   // 提交（Enter/Escape）：切回激活态视觉（清空覆盖层、文字交还 canvas 渲染），
   // 覆盖层保持挂载可编辑，IME 不被打断
   enterPassive() {

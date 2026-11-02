@@ -6,10 +6,17 @@ export class App {
   canvas: HTMLCanvasElement
   children: Node[] = []
   renderer: Renderer
+  // 空白点击回调：点击画布未命中任何节点时触发（供外部取消激活态等）
+  onBlankClick: ((e: MouseEvent) => void) | null = null
+  // 鼠标按下位置：用于区分点击与拖拽平移（click 在拖拽后仍会触发）
+  private downPoint: { x: number; y: number } | null = null
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
     this.renderer = new Renderer(canvas)
+    canvas.addEventListener('mousedown', (e) => {
+      this.downPoint = { x: e.clientX, y: e.clientY }
+    })
     canvas.addEventListener('click', (e) => this.onCanvasClick(e))
     // 容器尺寸变化：同步画布物理尺寸并重绘（ResizeObserver 首次观察也触发一次，等价重绘无副作用）
     new ResizeObserver(() => {
@@ -43,6 +50,10 @@ export class App {
         return
       }
     }
+    // 未命中节点：拖拽平移（位移超过阈值）不视为空白点击
+    const moved = this.downPoint
+      && Math.hypot(e.clientX - this.downPoint.x, e.clientY - this.downPoint.y) > 3
+    if (!moved) this.onBlankClick?.(e)
   }
 
   use(plugin: Plugin) {

@@ -9,6 +9,8 @@ export interface TextEditorOptions {
   onInput?: (text: Text) => void
   // 编辑框创建完成回调，供外部直接监听编辑框事件（如 Tab/Enter 新建节点）
   onEditStart?: (el: HTMLDivElement, text: Text) => void
+  // 编辑结束回调（失焦移除编辑框），供外部恢复键盘捕获焦点
+  onEditEnd?: () => void
   // 点击文本节点回调（仅激活不编辑，编辑由外部通过 start 主动触发）
   onActivate?: (text: Text) => void
 }
@@ -78,23 +80,30 @@ export class TextEditor implements Plugin {
   }
 
   // 公开编辑方法：创建编辑框覆盖在文本上开始编辑（供外部手动进入编辑）
-  start(text: Text) {
+  // passive 为 true 时进入激活态：光标与选区透明（视觉等同节点），打字/点击后由外部唤醒为编辑态
+  start(text: Text, options: { passive?: boolean } = {}) {
     if (!this.app) return
     const app = this.app
     this.stop(app)
     this.text = text
-    const el = this.view.create(text)
+    const el = this.view.create(text, options.passive ?? false)
     this.bindEvents(el, text, app)
     document.body.appendChild(el)
     this.el = el
     this.syncPosition(app)
-    this.focusAtEnd(el)
+    if (options.passive) {
+      // 激活态全选内容：首个输入字符将替换全部旧文本，IME 组合同样落在该覆盖层上
+      this.focusSelectAll(el)
+    } else {
+      this.focusAtEnd(el)
+    }
     this.scrollIntoView(app, text)
     // 通知外部编辑框已就绪，可自行绑定按键等事件
     this.options.onEditStart?.(el, text)
   }
 
-  // 绑定输入与失焦事件：输入同步文本并重渲染，失焦结束编辑
+  // 绑定输入与失焦事件：输入同步文本并重渲染
+  // 失焦不移除覆盖层（虚拟 text 常驻可编辑，passive 仅是视觉样式），只切回激活态外观并通知外部
   private bindEvents(el: HTMLDivElement, text: Text, app: App) {
     el.addEventListener('input', () => {
       // text 赋值走 accessor 自动重测，绘制即同步新内容
@@ -105,7 +114,13 @@ export class TextEditor implements Plugin {
       // 通知外部输入事件，触发重新布局等联动
       this.options.onInput?.(text)
     })
-    el.addEventListener('blur', () => this.stop(app))
+    el.addEventListener('blur', () => {
+      // 覆盖层可能已在节点切换中被移除，仅对仍在文档中的元素切回激活态视觉
+      if (el.isConnected) {
+        el.classList.add('silker-text-passive')
+        this.options.onEditEnd?.()
+      }
+    })
   }
 
   // 供外部为新增节点绑定点击编辑（如 Tab/Enter 创建的节点）
@@ -117,6 +132,23 @@ export class TextEditor implements Plugin {
   // 视口或节点变化后重新对齐编辑框位置与缩放（供外部在重新布局后调用的公开方法）
   reposition() {
     if (this.app) this.syncPosition(this.app)
+  }
+
+  // 覆盖层是否持有焦点（未聚焦时键盘由外部全局处理器接管）
+  hasFocus() {
+    return this.el !== null && document.activeElement === this.el
+  }
+
+  // 重新聚焦常驻覆盖层并全选内容：打字/IME 的默认输入直接落在其上，不吞任何键
+  focusForTyping() {
+    if (this.el) this.focusSelectAll(this.el)
+  }
+
+  // 提交（Enter/Escape）：切回激活态视觉并全选，覆盖层保持挂载可编辑，IME 不被打断
+  enterPassive() {
+    if (!this.el) return
+    this.el.classList.add('silker-text-passive')
+    this.focusSelectAll(this.el)
   }
 
   // 内部对齐：按当前视口把编辑框覆盖到节点上
@@ -146,6 +178,18 @@ export class TextEditor implements Plugin {
     }
   }
 
+  // 聚焦并全选内容（首个输入字符或 IME 组合将替换全部旧文本）
+  private focusSelectAll(el: HTMLDivElement) {
+    el.focus()
+    const range = document.createRange()
+    range.selectNodeContents(el)
+    const sel = window.getSelection()
+    if (sel) {
+      sel.removeAllRanges()
+      sel.addRange(range)
+    }
+  }
+
   // 移除编辑元素并重新渲染（先置空引用，避免 remove 触发 blur 递归重复移除）
   private stop(app: App) {
     const el = this.el
@@ -154,6 +198,8 @@ export class TextEditor implements Plugin {
     if (el) {
       el.remove()
       app.render()
+      // 通知外部编辑已结束（如恢复键盘捕获焦点）
+      this.options.onEditEnd?.()
     }
   }
 }

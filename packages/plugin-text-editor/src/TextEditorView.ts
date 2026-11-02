@@ -2,8 +2,22 @@ import type { Text } from '@silker/core'
 
 // 创建覆盖在文本节点上的可编辑视图
 export class TextEditorView {
-  // 创建编辑元素并应用全部样式
-  create(text: Text): HTMLDivElement {
+  // 激活态样式只需注入一次（隐藏光标与选区，视觉上与 canvas 节点一致）
+  private static styleInjected = false
+
+  private static ensurePassiveStyle() {
+    if (TextEditorView.styleInjected) return
+    const style = document.createElement('style')
+    style.textContent = `
+      .silker-text-passive { caret-color: transparent; outline: transparent !important; }
+      .silker-text-passive::selection { background: transparent; }
+    `
+    document.head.appendChild(style)
+    TextEditorView.styleInjected = true
+  }
+
+  // passive 为 true 时创建激活态覆盖层：光标与选区透明、无描边，打字后由外部移除该类恢复编辑态
+  create(text: Text, passive = false): HTMLDivElement {
     const el = document.createElement('div')
     el.contentEditable = 'true'
     el.textContent = text.text
@@ -12,6 +26,10 @@ export class TextEditorView {
     this.applyWrapStyle(el, text)
     this.applySizeStyle(el, text)
     this.applyPadding(el, text)
+    if (passive) {
+      TextEditorView.ensurePassiveStyle()
+      el.className = 'silker-text-passive'
+    }
     return el
   }
 

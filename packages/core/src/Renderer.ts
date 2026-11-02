@@ -28,6 +28,15 @@ export class Renderer {
     this.listeners.push(listener)
   }
 
+  // 同步画布物理尺寸到当前 CSS 尺寸（窗口/容器尺寸变化后调用，否则内容被拉伸模糊）
+  resize() {
+    const dpr = window.devicePixelRatio || 1
+    const rect = this.canvas.getBoundingClientRect()
+    this.width = this.canvas.width = Math.round(rect.width * dpr)
+    this.height = this.canvas.height = Math.round(rect.height * dpr)
+    this.ctx!.setTransform(dpr, 0, 0, dpr, 0, 0)
+  }
+
   // 更新视口变换并通知所有监听器
   setViewport(viewport: { x: number; y: number; scale: number }) {
     this.viewport = viewport

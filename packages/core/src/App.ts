@@ -11,6 +11,11 @@ export class App {
     this.canvas = canvas
     this.renderer = new Renderer(canvas)
     canvas.addEventListener('click', (e) => this.onCanvasClick(e))
+    // 容器尺寸变化：同步画布物理尺寸并重绘（ResizeObserver 首次观察也触发一次，等价重绘无副作用）
+    new ResizeObserver(() => {
+      this.renderer.resize()
+      this.render()
+    }).observe(canvas)
   }
 
   add(nodes: Node | Node[]) {

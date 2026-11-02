@@ -32,6 +32,10 @@ export class TextEditorView {
     if (passive) {
       this.applyPassiveSize(el, text);
       el.style.color = "transparent";
+      // 整体透明 + 沉底：激活态虚拟 DOM 完全不可见、不拦截指针事件（拖拽落在画布），
+      // 仅作为输入缓冲接收键盘/IME（focus 与 z-index 无关）
+      el.style.opacity = "0";
+      el.style.zIndex = "-1";
     } else {
       this.applySizeStyle(el, text);
     }

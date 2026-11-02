@@ -150,6 +150,9 @@ export class TextEditor implements Plugin {
     if (el.classList.contains('silker-text-passive')) {
       el.classList.remove('silker-text-passive')
       el.style.color = this.text.fill
+      // 恢复可见并置顶：编辑态覆盖层接管文字渲染与指针交互（点击定位光标）
+      el.style.opacity = ''
+      el.style.zIndex = ''
       if (fill) el.textContent = this.text.text
       this.view.applyEditModeSize(el, this.text)
       this.text.textHidden = true
@@ -200,6 +203,9 @@ export class TextEditor implements Plugin {
     el.classList.add('silker-text-passive')
     el.textContent = ''
     el.style.color = 'transparent'
+    // 整体透明 + 沉底：激活态虚拟 DOM 不可见、不拦截指针事件
+    el.style.opacity = '0'
+    el.style.zIndex = '-1'
     this.text.textHidden = false
     this.view.applyPassiveSize(el, this.text)
     this.app.render()

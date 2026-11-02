@@ -86,11 +86,15 @@ export class TextEditor implements Plugin {
     const app = this.app
     this.stop(app)
     this.text = text
+    // 覆盖层接管文字渲染：canvas 只画盒子，避免两层文字叠加变粗（含 passive 激活态）
+    text.textHidden = true
     const el = this.view.create(text, options.passive ?? false)
     this.bindEvents(el, text, app)
     document.body.appendChild(el)
     this.el = el
     this.syncPosition(app)
+    // 立即重绘一次，让 canvas 跳过该节点文字，否则覆盖层显示前 canvas 旧文字仍在
+    app.render()
     if (options.passive) {
       // 激活态全选内容：首个输入字符将替换全部旧文本，IME 组合同样落在该覆盖层上
       this.focusSelectAll(el)
@@ -193,6 +197,8 @@ export class TextEditor implements Plugin {
   // 移除编辑元素并重新渲染（先置空引用，避免 remove 触发 blur 递归重复移除）
   private stop(app: App) {
     const el = this.el
+    // 恢复 canvas 文字绘制
+    if (this.text) this.text.textHidden = false
     this.el = null
     this.text = null
     if (el) {

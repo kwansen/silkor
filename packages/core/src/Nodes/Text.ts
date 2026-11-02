@@ -52,6 +52,9 @@ export class Text extends Node {
   boxStyle: BoxStyle = { fill: '', stroke: '', lineWidth: 1, radius: 0 }
   lines: string[] = []
   wrap = true
+  // 为 true 时跳过文字绘制：编辑覆盖层挂载期间由覆盖层渲染文字（含 IME 组合串），
+  // canvas 只画盒子，避免两层文字叠加导致视觉变粗
+  textHidden = false
   // 离屏画布上下文，用于文本测量（不依赖渲染上下文）
   private measureCtx: CanvasRenderingContext2D
   // 字体度量缓存，供 drawText 定位使用
@@ -168,7 +171,8 @@ export class Text extends Node {
   // 仅负责绘制，宽高与行信息已在构造时计算完毕
   render(ctx: CanvasRenderingContext2D) {
     this.drawBox(ctx)
-    this.drawText(ctx)
+    // 覆盖层挂载期间文字由覆盖层渲染，canvas 跳过
+    if (!this.textHidden) this.drawText(ctx)
   }
 
   // 逐字符扫描光标矩形，按行盒 top 变化切分出浏览器的真实换行位置

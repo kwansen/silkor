@@ -43,6 +43,9 @@ export class App {
     const { x: vx, y: vy, scale } = this.renderer.viewport
     const x = (e.clientX - rect.left - vx) / scale
     const y = (e.clientY - rect.top - vy) / scale
+    // 拖拽（位移超过阈值）不视为点击：既不激活节点也不触发空白点击（如框选结束落在节点上）
+    if (this.downPoint
+      && Math.hypot(e.clientX - this.downPoint.x, e.clientY - this.downPoint.y) > 3) return
     for (let i = this.children.length - 1; i >= 0; i--) {
       const hit = this.children[i].hitNode(x, y)
       if (hit) {
@@ -50,10 +53,7 @@ export class App {
         return
       }
     }
-    // 未命中节点：拖拽平移（位移超过阈值）不视为空白点击
-    const moved = this.downPoint
-      && Math.hypot(e.clientX - this.downPoint.x, e.clientY - this.downPoint.y) > 3
-    if (!moved) this.onBlankClick?.(e)
+    this.onBlankClick?.(e)
   }
 
   use(plugin: Plugin) {

@@ -8,7 +8,7 @@ export interface Bounds {
   maxY: number
 }
 
-// 视口插件：滚轮以鼠标为中心缩放，拖拽平移画布，支持按内容包围盒拟合视口
+// 视口插件：滚轮以鼠标为中心缩放，右键拖拽平移画布（左键保留默认行为），支持按内容包围盒拟合视口
 export class Viewport implements Plugin {
   private dragging = false
   private lastX = 0
@@ -16,11 +16,14 @@ export class Viewport implements Plugin {
   private canvas: HTMLCanvasElement | null = null
   private app: App | null = null
 
-  // 安装插件：绑定画布滚轮缩放与拖拽平移事件
+  // 安装插件：绑定画布滚轮缩放与右键拖拽平移事件
   install(app: App, canvas: HTMLCanvasElement) {
     this.app = app
     this.canvas = canvas
-    canvas.style.cursor = 'grab'
+    // 右键负责拖拽：光标平时保持 default，仅右键拖拽时切换小手（见 onDown/onUp）
+    // 阻止右键菜单与右键默认行为（页面层可挡掉浏览器默认右键交互；
+    // 浏览器扩展的鼠标手势属于扩展权限，页面无法彻底禁用）
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault())
     canvas.addEventListener('wheel', (e) => this.onWheel(e, app))
     canvas.addEventListener('mousedown', (e) => this.onDown(e))
     window.addEventListener('mousemove', (e) => this.onMove(e, app))
@@ -60,8 +63,10 @@ export class Viewport implements Plugin {
     app.render()
   }
 
-  // 鼠标按下：进入拖拽并记录起点
+  // 鼠标按下：仅右键进入拖拽并记录起点（左键保留默认行为：选择、点击等）
   private onDown(e: MouseEvent) {
+    if (e.button !== 2) return
+    e.preventDefault()
     this.dragging = true
     this.lastX = e.clientX
     this.lastY = e.clientY
@@ -80,9 +85,9 @@ export class Viewport implements Plugin {
     app.render()
   }
 
-  // 鼠标松开：结束拖拽并恢复光标
+  // 鼠标松开：结束拖拽并恢复默认光标
   private onUp() {
     this.dragging = false
-    this.canvas!.style.cursor = 'grab'
+    if (this.canvas) this.canvas.style.cursor = ''
   }
 }

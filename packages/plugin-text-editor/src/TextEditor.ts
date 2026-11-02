@@ -143,8 +143,9 @@ export class TextEditor implements Plugin {
   // 唤醒为编辑态（飞书模型）：canvas 停止渲染文字、切编辑态尺寸。fill 为 true（点击进入）时把
   // 节点文本填入覆盖层做正常编辑；为 false（打字/IME/粘贴进入）时保持空覆盖层，输入内容经 input
   // 同步替换节点文本。填充只发生在点击路径（无组合进行中）—— 组合窗口内程序化改写内容/选区会
-  // 污染 Chromium 的 IME 组合会话（已填内容被当作组合文本重放，导致节点文本复制一份）
-  beginEdit(fill = false) {
+  // 污染 Chromium 的 IME 组合会话（已填内容被当作组合文本重放，导致节点文本复制一份）。
+  // point 为点击屏幕坐标：填入后经浏览器命中测试把光标折叠到对应字符位置（focus 本身不定位光标）
+  beginEdit(fill = false, point?: { x: number; y: number }) {
     const el = this.el
     if (!el || !this.text || !this.app) return
     if (el.classList.contains('silker-text-passive')) {
@@ -159,6 +160,40 @@ export class TextEditor implements Plugin {
       this.app.render()
     }
     if (document.activeElement !== el) el.focus()
+    if (point) this.focusAtPoint(el, point.x, point.y)
+  }
+
+  // 光标定位：屏幕坐标 → 字符偏移由浏览器完成（caretRangeFromPoint 命中测试，
+  // 字体/字宽/换行等排版信息即覆盖层自身呈现），再经 Selection API 折叠光标；
+  // 仅当命中点落在覆盖层内才应用，避免点到相邻元素时光标跳走
+  private focusAtPoint(el: HTMLDivElement, x: number, y: number) {
+    const sel = window.getSelection()
+    if (!sel) return
+    const doc = document as Document & {
+      caretPositionFromPoint?: (
+        x: number,
+        y: number,
+      ) => { offsetNode: Range["startContainer"]; offset: number } | null
+    }
+    let container: Range["startContainer"] | null = null
+    let offset = 0
+    if (doc.caretRangeFromPoint) {
+      const range = doc.caretRangeFromPoint(x, y)
+      if (!range) return
+      container = range.startContainer
+      offset = range.startOffset
+    } else if (doc.caretPositionFromPoint) {
+      const pos = doc.caretPositionFromPoint(x, y)
+      if (!pos) return
+      container = pos.offsetNode
+      offset = pos.offset
+    }
+    if (!container || !el.contains(container)) return
+    const range = document.createRange()
+    range.setStart(container, offset)
+    range.collapse(true)
+    sel.removeAllRanges()
+    sel.addRange(range)
   }
 
   // 供外部为新增节点绑定点击编辑（如 Tab/Enter 创建的节点）

@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
   <meta charset="utf-8">
-  <title>playground</title>
+  <title>HTML-in-Canvas 演示（Chrome 157+）</title>
   <style>
     * {
       padding: 0;
@@ -11,17 +11,73 @@
       box-sizing: border-box;
     }
 
+    body {
+      overflow: hidden;
+    }
+
+    /* content="drawable"：声明该 canvas 需要绘制内部 DOM 元素 */
     #canvas {
       display: block;
       width: 100vw;
       height: 100vh;
     }
+
+    /* 以下样式作用于 canvas 内部的 drawable 元素，同样支持 DevTools 检查 */
+    .card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-family: sans-serif;
+      color: #1f2937;
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+    }
+
+    /* 可编辑卡片：光标与输入法照常工作 */
+    #editor {
+      width: 320px;
+      outline: none;
+      line-height: 1.6;
+      font-size: 15px;
+      caret-color: #3b82f6;
+    }
+
+    #editor:focus {
+      border-color: #3b82f6;
+    }
+
+    /* 按钮元素：点击事件照常触发 */
+    #btn {
+      background: #3b82f6;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 18px;
+      font-size: 14px;
+      font-family: sans-serif;
+      cursor: pointer;
+    }
+
+    #btn:hover {
+      background: #2563eb;
+    }
+
+    /* 每秒自更新的卡片：展示活 DOM 的像素自动跟随 */
+    #clock {
+      font-size: 13px;
+      color: #64748b;
+      width: max-content;
+    }
   </style>
 </head>
 
 <body>
-  <canvas id="canvas">
-    <div class="">你好</div>
+  <!-- content="drawable" + 子元素 drawable：浏览器把真实 DOM 绘制进 canvas，
+       文本选中、Ctrl+F、IME、屏幕阅读器、事件全部照常工作 -->
+  <canvas id="canvas" content="drawable">
+    <div id="editor" class="card" drawable contenteditable="true">我是 canvas 里的活 DOM，点我直接编辑，中文输入法可用</div>
+    <button id="btn" drawable>点我 0</button>
+    <div id="clock" class="card" drawable></div>
   </canvas>
   <script type="module" src="./src/main.ts"></script>
 </body>

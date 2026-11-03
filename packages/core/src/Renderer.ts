@@ -23,9 +23,13 @@ export class Renderer {
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   }
 
-  // 注册视口变化回调
-  onViewportChange(listener: () => void) {
+  // 注册视口变化回调，返回解除订阅函数（供插件 dispose 时撤销监听）
+  onViewportChange(listener: () => void): () => void {
     this.listeners.push(listener)
+    return () => {
+      const i = this.listeners.indexOf(listener)
+      if (i >= 0) this.listeners.splice(i, 1)
+    }
   }
 
   // 同步画布物理尺寸到当前 CSS 尺寸（窗口/容器尺寸变化后调用，否则内容被拉伸模糊）

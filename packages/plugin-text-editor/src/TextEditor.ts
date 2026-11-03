@@ -1,5 +1,7 @@
 import { Text } from '@silker/core'
 import type { App, Node, Plugin } from '@silker/core'
+import { TEXT_EDITOR_CAPABILITY } from './capability'
+import type { TextEditorCapability } from './capability'
 import { TextEditorView } from './TextEditorView'
 import { TextEditorPosition } from './TextEditorPosition'
 
@@ -16,29 +18,70 @@ export interface TextEditorOptions {
 }
 
 // 文本编辑插件：点击文本进入编辑，输入实时同步，失焦自动保存
-export class TextEditor implements Plugin {
+export class TextEditor implements Plugin, TextEditorCapability {
   private el: HTMLDivElement | null = null
   private text: Text | null = null
   private view = new TextEditorView()
   private position: TextEditorPosition | null = null
   private app: App | null = null
+  // install 期注册的资源清理句柄（dispose 时撤销）
+  private offViewportChange: (() => void) | null = null
+  private originalAdd: ((nodes: Node | Node[]) => void) | null = null
+  private disposed = false
 
   constructor(private options: TextEditorOptions = {}) {}
 
-  // 安装插件：绑定现有文本节点，并包装 add 使后续节点也自动绑定
+  // 安装插件：注册文本编辑能力，绑定现有文本节点，并包装 add 使后续节点也自动绑定
   install(app: App, canvas: HTMLCanvasElement) {
+    this.disposed = false
     this.app = app
     this.position = new TextEditorPosition(canvas)
-    // 视口变化时重新对齐编辑框，跟随平移缩放
-    app.renderer.onViewportChange(() => this.syncPosition(app))
+    app.provide(TEXT_EDITOR_CAPABILITY, this, {
+      version: '1.0',
+      provider: '@silker/plugin-text-editor',
+    })
+    // 视口变化时重新对齐编辑框，跟随平移缩放；记录解除订阅句柄供 dispose 撤销
+    this.offViewportChange = app.renderer.onViewportChange(() =>
+      this.syncPosition(app),
+    )
     app.children.forEach(child => this.bindText(child, app))
-    // 包装 add：新加入的节点树自动绑定点击编辑
+    // 包装 add：新加入的节点树自动绑定点击编辑（记录原实现供 dispose 还原）
     const add = app.add.bind(app)
+    this.originalAdd = add
     app.add = (nodes) => {
       add(nodes)
       const list = Array.isArray(nodes) ? nodes : [nodes]
       list.forEach(child => this.bindText(child, app))
     }
+  }
+
+  // 卸载插件：移除覆盖层（交还 canvas 文字渲染）、还原 add 包装、
+  // 撤销视口监听与节点点击回调；幂等（重复调用无副作用）
+  dispose() {
+    if (this.disposed) return
+    this.disposed = true
+    const el = this.el
+    // 不走 stop()：卸载属资源清理，避免触发 onEditEnd 外部回调产生副作用
+    if (this.text) this.text.textHidden = false
+    this.el = null
+    this.text = null
+    el?.remove()
+    // 解绑已绑定节点的点击回调
+    if (this.app) {
+      const unbind = (node: Node) => {
+        if (node instanceof Text) node.onClick = null
+        node.children.forEach(unbind)
+      }
+      this.app.children.forEach(unbind)
+    }
+    // 还原 add 包装与视口监听
+    if (this.app && this.originalAdd) this.app.add = this.originalAdd
+    this.originalAdd = null
+    this.offViewportChange?.()
+    this.offViewportChange = null
+    if (el && this.app) this.app.render()
+    this.app = null
+    this.position = null
   }
 
   // 递归为节点树中的文本节点绑定点击事件（仅通知激活，不直接进入编辑）

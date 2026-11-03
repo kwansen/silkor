@@ -21,6 +21,9 @@ export interface TextEditorCapability {
   bind(node: Node): void
   // 是否存在覆盖层（激活态或编辑态）
   readonly isEditing: boolean
+  // 是否真正处于编辑态（覆盖层接管文字渲染）：激活态覆盖层虽挂载但文字仍由 canvas
+  // 渲染，不应视作"正在编辑"（undo/redo 等外部守卫按此判定）
+  readonly isTyping: boolean
   // 覆盖层是否持有焦点（未聚焦时键盘由外部全局处理器接管）
   hasFocus(): boolean
 }

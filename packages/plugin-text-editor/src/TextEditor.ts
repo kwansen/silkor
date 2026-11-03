@@ -122,6 +122,12 @@ export class TextEditor implements Plugin, TextEditorCapability {
     return this.el !== null
   }
 
+  // 是否真正处于编辑态（覆盖层接管文字渲染）：passive 激活态下覆盖层虽挂载，
+  // 但文字仍由 canvas 渲染（el 带 silker-text-passive 类），不应视作"正在编辑"
+  get isTyping() {
+    return this.el !== null && !this.el.classList.contains('silker-text-passive')
+  }
+
   // 公开编辑方法：创建编辑框覆盖在文本上开始编辑（供外部手动进入编辑）
   // passive 为 true 时进入激活态（飞书模型）：覆盖层保持为空、文字仍由 canvas 渲染（视觉与未激活
   // 完全一致），光标与选区透明；打字/点击后由 beginEdit 唤醒为编辑态，覆盖层才接管文字渲染

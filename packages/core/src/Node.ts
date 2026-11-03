@@ -7,6 +7,8 @@ export interface NodeOptions {
   width?: number
   height?: number
   visible?: boolean
+  // 子树折叠标志（树形场景用）：折叠时子树不参与布局与渲染，由上层场景负责可见性联动
+  collapsed?: boolean
   opacity?: number
   scaleX?: number
   scaleY?: number
@@ -35,6 +37,8 @@ export abstract class Node {
   autoHeight = false
   // 是否可见
   visible = true
+  // 子树是否折叠（true 时子树不布局、不渲染）
+  collapsed = false
   // 透明度
   opacity = 1
   // 缩放比例

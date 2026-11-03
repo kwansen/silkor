@@ -42,7 +42,7 @@ export class Text extends Node {
   lineWidth = 1
   fontSize = 16
   fontWeight = 400
-  padding = 0
+  padding: Padding = 0
   paddingTop = 0
   paddingRight = 0
   paddingBottom = 0
@@ -86,13 +86,7 @@ export class Text extends Node {
       const [min, max] = this.widthRange
       this.widthRange = [Math.min(min, max), Math.max(min, max)]
     }
-    // 构造时展开 padding，供渲染时直接使用
-    const [pt, pr, pb, pl] = this.normalizePadding(this.padding)
-    this.paddingTop = pt
-    this.paddingRight = pr
-    this.paddingBottom = pb
-    this.paddingLeft = pl
-    // 创建离屏画布，构造时即完成测量，保证插件在渲染前即可读取宽高数据
+    // 构造时即完成测量，保证插件在渲染前即可读取宽高数据（padding 展开由 measure 统一处理）
     this.measureCtx = document.createElement('canvas').getContext('2d')!
     this.measure()
   }
@@ -103,7 +97,12 @@ export class Text extends Node {
     ctx.font = `${this.fontWeight} ${this.fontSize}px ${this.fontFamily}`
     this.boxAscent = ctx.measureText(this.text).fontBoundingBoxAscent
     this.boxDescent = ctx.measureText(this.text).fontBoundingBoxDescent
-    const { paddingTop: pt, paddingRight: pr, paddingBottom: pb, paddingLeft: pl } = this
+    // 每次测量前重新展开 padding，支持运行时修改样式后重测
+    const [pt, pr, pb, pl] = this.normalizePadding(this.padding)
+    this.paddingTop = pt
+    this.paddingRight = pr
+    this.paddingBottom = pb
+    this.paddingLeft = pl
     const measurer = Text.getMeasurer()
     measurer.style.font = `${this.fontWeight} ${this.fontSize}px ${this.fontFamily}`
     // 单行宽度用 DOM max-content 测量，与编辑覆盖层的 max-content 宽度完全一致

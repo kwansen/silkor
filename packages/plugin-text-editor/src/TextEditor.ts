@@ -136,7 +136,10 @@ export class TextEditor implements Plugin, TextEditorCapability {
       this.app.render()
     }
     if (document.activeElement !== el) el.focus()
-    if (options.point) this.focusAtPoint(el, options.point.x, options.point.y)
+    // 命中失败（点击落在文本盒外的形状空白处、覆盖层外等）兜底聚焦到末尾，
+    // 符合"点击进入编辑"的直觉：焦点应靠近内容尾部而非回到开头
+    if (options.point && !this.focusAtPoint(el, options.point.x, options.point.y))
+      this.focusAtEnd(el)
   }
 
   // 隐藏覆盖层：清空缓冲、文字交还 canvas 渲染、重新聚焦（覆盖层保持挂载可继续接收键盘）
@@ -269,10 +272,10 @@ export class TextEditor implements Plugin, TextEditorCapability {
 
   // 光标定位：屏幕坐标 → 字符偏移由浏览器完成（命中测试，
   // 字体/字宽/换行等排版信息即覆盖层自身呈现），再经 Selection API 折叠光标；
-  // 仅当命中点落在覆盖层内才应用，避免点到相邻元素时光标跳走
-  private focusAtPoint(el: HTMLDivElement, x: number, y: number) {
+  // 仅当命中点落在覆盖层内才应用并返回 true，避免点到相邻元素时光标跳走
+  private focusAtPoint(el: HTMLDivElement, x: number, y: number): boolean {
     const sel = window.getSelection()
-    if (!sel) return
+    if (!sel) return false
     // 命中测试 API 兼容层：标准 caretPositionFromPoint 优先，旧浏览器回退到
     // 非标准的 caretRangeFromPoint（lib.dom 已标记 @deprecated，经本地类型声明
     // 重新签名以绕开弃用提示，实际调用语义不变）
@@ -287,19 +290,31 @@ export class TextEditor implements Plugin, TextEditorCapability {
     let offset = 0
     if (doc.caretPositionFromPoint) {
       const pos = doc.caretPositionFromPoint(x, y)
-      if (!pos) return
+      if (!pos) return false
       container = pos.offsetNode
       offset = pos.offset
     } else if (doc.caretRangeFromPoint) {
       const range = doc.caretRangeFromPoint(x, y)
-      if (!range) return
+      if (!range) return false
       container = range.startContainer
       offset = range.startOffset
     }
-    if (!container || !el.contains(container)) return
+    if (!container || !el.contains(container)) return false
     const range = document.createRange()
     range.setStart(container, offset)
     range.collapse(true)
+    sel.removeAllRanges()
+    sel.addRange(range)
+    return true
+  }
+
+  // 光标折叠到内容末尾：点击命中失败时的兜底
+  private focusAtEnd(el: HTMLDivElement) {
+    const sel = window.getSelection()
+    if (!sel) return
+    const range = document.createRange()
+    range.selectNodeContents(el)
+    range.collapse(false)
     sel.removeAllRanges()
     sel.addRange(range)
   }

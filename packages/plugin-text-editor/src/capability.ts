@@ -12,7 +12,7 @@ export interface TextEditorCapability {
   start(text: Text): void
   // 显示覆盖层接管文字渲染：fill 为 true 时填入节点文本（点击路径），
   // 为 false 时保持空缓冲（打字/IME/粘贴路径，输入经 input 事件同步替换节点文本）；
-  // point 为点击屏幕坐标，经浏览器命中测试把光标折叠到对应字符位置
+  // point 为点击屏幕坐标，经浏览器命中测试把光标折叠到对应字符位置，命中失败时聚焦到末尾
   show(options?: { fill?: boolean; point?: { x: number; y: number } }): void
   // 隐藏覆盖层：清空缓冲、文字交还 canvas 渲染、重新聚焦（覆盖层保持挂载）
   hide(): void

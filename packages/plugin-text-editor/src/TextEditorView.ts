@@ -71,10 +71,11 @@ export class TextEditorView {
     el.style.color = text.fill;
   }
 
-  // 应用文本的字体样式（字号、字重与字体族）
+  // 应用文本的字体样式（字号、字重、字体族与水平对齐）
   private applyTextStyle(el: HTMLDivElement, text: Text) {
     el.style.font = `${text.fontWeight} ${text.fontSize}px ${text.fontFamily}`;
     el.style.lineHeight = `${text.lineHeight}`;
+    el.style.textAlign = text.align;
   }
 
   // 应用是否自动换行的样式

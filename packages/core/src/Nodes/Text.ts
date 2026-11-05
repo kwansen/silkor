@@ -21,6 +21,8 @@ interface TextOptions extends NodeOptions {
   fontFamily?: string
   padding?: Padding
   lineHeight?: number
+  // 水平对齐：节点内容区内左/中/右对齐（多行时各行按同一锚点对齐）
+  align?: 'left' | 'center' | 'right'
   boxStyle?: BoxStyle
 }
 
@@ -49,6 +51,7 @@ export class Text extends Node {
   paddingLeft = 0
   lineHeight = 1
   fontFamily = "sans-serif"
+  align: 'left' | 'center' | 'right' = 'left'
   boxStyle: BoxStyle = { fill: '', stroke: '', lineWidth: 1, radius: 0 }
   lines: string[] = []
   wrap = true
@@ -248,19 +251,23 @@ export class Text extends Node {
 
   // 设置字体后逐行绘制文字（先描边后填充，用构造时缓存的字体度量定位）
   private drawText(ctx: CanvasRenderingContext2D) {
-    const { fontSize, fontWeight, lineHeight, lines, stroke, lineWidth, fill, paddingTop, paddingLeft, fontFamily, boxAscent, boxDescent } = this
+    const { fontSize, fontWeight, lineHeight, lines, stroke, lineWidth, fill, paddingTop, paddingLeft, paddingRight, fontFamily, boxAscent, boxDescent, align } = this
     ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`
+    // 对齐锚点：left 锚内容区左缘，center 锚内容区中轴，right 锚内容区右缘
+    const contentRight = this.width - paddingRight
+    const posX = align === 'center' ? (paddingLeft + contentRight) / 2 : align === 'right' ? contentRight : paddingLeft
+    ctx.textAlign = align
     lines.forEach((line, i) => {
       // 基线公式与 DOM 行盒半行距对齐：baseline = paddingTop + (行高 + ascent - descent) / 2，保证编辑覆盖层逐像素贴合
       const posY = (fontSize * lineHeight + boxAscent - boxDescent) / 2 + fontSize * lineHeight * i + paddingTop
       if (stroke) {
         ctx.strokeStyle = stroke
         ctx.lineWidth = lineWidth
-        ctx.strokeText(line, paddingLeft, posY)
+        ctx.strokeText(line, posX, posY)
       }
       if (fill) {
         ctx.fillStyle = fill
-        ctx.fillText(line, paddingLeft, posY)
+        ctx.fillText(line, posX, posY)
       }
     })
   }

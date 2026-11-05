@@ -193,8 +193,10 @@ export class TextEditor implements Plugin, TextEditorCapability {
     el.addEventListener('input', () => {
       // 隐藏态下的意外 input 不同步内容，显示后的输入才经此处同步节点文本
       if (this.hidden) return
-      // text 赋值走 accessor 自动重测，绘制即同步新内容
-      text.text = el.textContent || ''
+      // 用 readText 而非 textContent 读取：回车产生的 <div>/<br> 在 textContent
+      // 中不产出换行（多行塌成一行）。编辑行为全部保持浏览器原生，不拦截
+      // beforeinput（拦截后异步 execCommand 会打断输入法组合，吞掉首键）
+      text.text = this.readText(el)
       app.render()
       this.panIntoView(app, text)
       this.syncPosition(app)
@@ -208,6 +210,50 @@ export class TextEditor implements Plugin, TextEditorCapability {
         this.options.onEditEnd?.()
       }
     })
+  }
+
+  // 读取覆盖层文本：把回车产生的 <div>/<p> 块级边界与 <br> 折算为 \n。
+  // 不用 innerText——空块 <div><br></div>（行首回车）会被它多算一个换行；
+  // 块级边界在块间连接，块内 <br> 原位折算，仅含 <br> 的空块视为一个空行
+  private readText(el: HTMLElement): string {
+    const walk = (node: HTMLElement): string => {
+      const blocks: string[] = []
+      let inline = ''
+      let inlineDirty = false
+      const flush = () => {
+        if (inlineDirty) {
+          blocks.push(inline)
+          inline = ''
+          inlineDirty = false
+        }
+      }
+      for (const child of Array.from(node.childNodes)) {
+        // nodeType：3 = 文本节点，1 = 元素节点（用数值避免与 core 的 Node 类型名冲突）
+        if (child.nodeType === 3) {
+          if (child.textContent) {
+            inline += child.textContent
+            inlineDirty = true
+          }
+        } else if (child.nodeType === 1) {
+          const e = child as HTMLElement
+          if (e.tagName === 'BR') {
+            inline += '\n'
+            inlineDirty = true
+          } else if (e.tagName === 'DIV' || e.tagName === 'P') {
+            flush()
+            let inner = walk(e)
+            if (inner === '\n') inner = ''
+            blocks.push(inner)
+          } else {
+            inline += walk(e)
+            inlineDirty = true
+          }
+        }
+      }
+      flush()
+      return blocks.join('\n')
+    }
+    return walk(el)
   }
 
   // 切回隐藏态（focus 为 true 时重新聚焦）：外观交由 view 同步，文字交还 canvas 渲染

@@ -138,8 +138,7 @@ export class Text extends Node {
         const contentWidth = Math.max(0, boxMaxWidth - pl - pr)
         measurer.style.whiteSpace = 'pre-wrap'
         measurer.style.width = `${contentWidth}px`
-        measurer.textContent = this.text
-        const lines = this.domWrapLines(measurer, this.text)
+        const lines = this.wrapLines(measurer, this.text)
         if (lines.length === 1) {
           this.width = Math.min(Math.max(textWidth + pl + pr, boxMinWidth), boxMaxWidth)
         } else {
@@ -163,11 +162,20 @@ export class Text extends Node {
       const contentWidth = Math.max(0, this.width - pl - pr)
       measurer.style.whiteSpace = 'pre-wrap'
       measurer.style.width = `${contentWidth}px`
-      measurer.textContent = this.text
-      this.lines = this.domWrapLines(measurer, this.text)
+      this.lines = this.wrapLines(measurer, this.text)
     }
     // 空文本兜底为单行高度，避免塌缩；括号确保行数先兜底再乘行高
     this.height = (this.lines.length || 1) * this.fontSize * this.lineHeight + pt + pb
+  }
+
+  // 硬换行（\n）拆段后逐段做软换行测量：段内超宽自动折行，空段保留为空行
+  private wrapLines(el: HTMLDivElement, text: string): string[] {
+    const lines: string[] = []
+    for (const seg of text.split('\n')) {
+      el.textContent = seg
+      lines.push(...this.domWrapLines(el, seg))
+    }
+    return lines
   }
 
   // 仅负责绘制，宽高与行信息已在构造时计算完毕

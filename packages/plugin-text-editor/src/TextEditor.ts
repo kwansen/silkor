@@ -256,7 +256,10 @@ export class TextEditor implements Plugin, TextEditorCapability {
       flush()
       return blocks.join('\n')
     }
-    return walk(el)
+    // 清空后残留的 <br> 会被折算成 '\n'（两个空行）：无可视字符时归一为空串，
+    // 否则节点按多空行测量会撑到最大宽度、变成两行高
+    const out = walk(el)
+    return /\S/.test(out) ? out : ''
   }
 
   // 切回隐藏态（focus 为 true 时重新聚焦）：外观交由 view 同步，文字交还 canvas 渲染

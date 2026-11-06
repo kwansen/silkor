@@ -141,7 +141,8 @@ export class Text extends Node {
         measurer.style.whiteSpace = 'pre-wrap'
         measurer.style.width = `${contentWidth}px`
         const lines = this.wrapLines(measurer, this.text)
-        if (lines.length === 1) {
+        // 全空行（无可视字符，如清空残留的换行）按单行空文本钳宽，不撑到最大宽度
+        if (lines.length === 1 || !lines.some(l => l)) {
           this.width = Math.min(Math.max(textWidth + pl + pr, boxMinWidth), boxMaxWidth)
         } else {
           this.width = boxMaxWidth

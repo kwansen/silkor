@@ -98,8 +98,10 @@ export class Text extends Node {
   measure() {
     const ctx = this.measureCtx
     ctx.font = `${this.fontWeight} ${this.fontSize}px ${this.fontFamily}`
-    this.boxAscent = ctx.measureText(this.text).fontBoundingBoxAscent
-    this.boxDescent = ctx.measureText(this.text).fontBoundingBoxDescent
+    // 一次度量同时取上行高与下行高
+    const font = ctx.measureText(this.text)
+    this.boxAscent = font.fontBoundingBoxAscent
+    this.boxDescent = font.fontBoundingBoxDescent
     // 每次测量前重新展开 padding，支持运行时修改样式后重测
     const [pt, pr, pb, pl] = this.normalizePadding(this.padding)
     this.paddingTop = pt
@@ -185,23 +187,46 @@ export class Text extends Node {
     if (!this.textHidden) this.drawText(ctx)
   }
 
-  // 逐字符扫描光标矩形，按行盒 top 变化切分出浏览器的真实换行位置
+  // 硬换行（\n）拆段后逐段做软换行测量：整段一次读取行盒，逐行二分定位换行位置
   private domWrapLines(el: HTMLDivElement, text: string): string[] {
     if (!text) return ['']
     const node = el.firstChild!
+    const len = text.length
+    // 整段文本一次 getClientRects：每个行盒一个 rect，收敛出各行 top
+    // （合并 1px 内的浮点抖动，阈值与原逐字符判定一致）
+    const whole = document.createRange()
+    whole.setStart(node, 0)
+    whole.setEnd(node, len)
+    const lineTops: number[] = []
+    for (const rect of whole.getClientRects()) {
+      if (!lineTops.length || rect.top > lineTops[lineTops.length - 1] + 1) {
+        lineTops.push(rect.top)
+      }
+    }
+    // 单行无换行，直接整段返回
+    if (lineTops.length <= 1) return [text]
+    // 单字符所在行盒 top（多次读取间无 DOM/样式变更，布局只在首次读取时计算一次）
+    const charTop = (i: number): number => {
+      const r = document.createRange()
+      r.setStart(node, i)
+      r.setEnd(node, i + 1)
+      return r.getClientRects()[0]?.top ?? Infinity
+    }
+    // 逐行二分定位行首偏移：行 top 沿字符索引单调不减，谓词 top(i) > 上一行 top + 1
+    // 在 [start, len) 上先假后真，首个真值即该行首字符 —— O(行数 × log 字符数) 次矩形读取
     const lines: string[] = []
     let start = 0
-    let lastTop: number | null = null
-    for (let i = 0; i < text.length; i++) {
-      const range = document.createRange()
-      range.setStart(node, i)
-      range.setEnd(node, i + 1)
-      const top: number | null | undefined = range.getClientRects()[0]?.top ?? lastTop
-      if (lastTop !== null && top !== null && Math.abs(top - lastTop) > 1) {
-        lines.push(text.slice(start, i))
-        start = i
+    for (let k = 1; k < lineTops.length; k++) {
+      const prevTop = lineTops[k - 1]
+      let lo = start
+      let hi = len
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1
+        if (charTop(mid) > prevTop + 1) hi = mid
+        else lo = mid + 1
       }
-      lastTop = top
+      lines.push(text.slice(start, lo))
+      start = lo
     }
     lines.push(text.slice(start))
     return lines

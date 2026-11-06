@@ -46,6 +46,18 @@ export class App {
     this.renderer.render(this.children)
   }
 
+  // rAF 合帧渲染：一帧内多次请求合并为一次绘制。平移/缩放/输入等高频事件只请求
+  // 不直接绘制，把「每事件一绘」的全量重绘降为「每帧最多一绘」
+  private renderScheduled = false
+  requestRender() {
+    if (this.renderScheduled) return
+    this.renderScheduled = true
+    requestAnimationFrame(() => {
+      this.renderScheduled = false
+      this.render()
+    })
+  }
+
   // 处理画布点击：屏幕坐标经视口逆变换为世界坐标，再找命中节点触发 onClick
   private onCanvasClick(e: MouseEvent) {
     const rect = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect()

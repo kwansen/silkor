@@ -23,6 +23,14 @@ export interface NodeOptions {
   shadowOffsetY?: number
 }
 
+// 世界轴对齐包围盒
+export interface Bounds {
+  minX: number
+  minY: number
+  maxX: number
+  maxY: number
+}
+
 export abstract class Node {
   //#region 属性
   id: string | null = null
@@ -124,6 +132,27 @@ export abstract class Node {
     const p = this.getWorldTransform().transformPoint({ x: 0, y: 0 })
     return { x: p.x, y: p.y }
   }
+
+  // 世界轴对齐包围盒：默认把自身矩形四角经世界变换后取包络（旋转/倾斜安全）。
+  // 无 width/height 的节点（如连线）覆写此方法，按自身几何端点计算
+  getBounds(): Bounds {
+    const m = this.getWorldTransform()
+    let { minX, minY, maxX, maxY } = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity }
+    for (const corner of [
+      { x: 0, y: 0 },
+      { x: this.width, y: 0 },
+      { x: this.width, y: this.height },
+      { x: 0, y: this.height },
+    ]) {
+      const p = m.transformPoint(corner)
+      minX = Math.min(minX, p.x)
+      minY = Math.min(minY, p.y)
+      maxX = Math.max(maxX, p.x)
+      maxY = Math.max(maxY, p.y)
+    }
+    return { minX, minY, maxX, maxY }
+  }
+
   // 判断世界坐标点是否命中节点矩形（逆变换后检查是否落在 0,0,w,h 内）
   hitTest(worldX: number, worldY: number) {
     const local = this.localTransform.inverse().transformPoint({ x: worldX, y: worldY })

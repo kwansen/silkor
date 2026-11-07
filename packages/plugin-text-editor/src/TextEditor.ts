@@ -1,7 +1,7 @@
 ﻿import { Text } from '@silker/core'
 import type { App, Node, Plugin } from '@silker/core'
-import { TEXT_EDITOR_CAPABILITY } from './capability'
-import type { TextEditorCapability } from './capability'
+import { TEXT_EDITOR_CAPABILITY } from '@silker/core'
+import type { TextEditorCapability } from '@silker/core'
 import { TextEditorView } from './TextEditorView'
 import { TextEditorPosition } from './TextEditorPosition'
 

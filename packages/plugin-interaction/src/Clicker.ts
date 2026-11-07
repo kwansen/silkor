@@ -1,19 +1,9 @@
-import { capabilityKey } from '@silker/core'
+import { CANVAS_CLICK_CAPABILITY } from '@silker/core'
 import type { App, Plugin } from '@silker/core'
-
-// 画布点击能力：节点命中分发与空白点击回调的注册入口。
-// 点击判定与命中分发属于交互机制层，从 App 收敛至此——core 只保留渲染与
-// 能力机制，第三方可整体替换本插件实现自定义分发策略
-export interface CanvasClickCapability {
-  // 空白点击回调（覆盖语义）：点击画布未命中任何节点时触发；传 null 取消。
-  // 拖拽（位移超过阈值）不视为点击，不会触发
-  onBlankClick(handler: ((e: MouseEvent) => void) | null): void
-}
-
-// 能力键：导出供消费方查询
-export const CANVAS_CLICK_CAPABILITY = capabilityKey<CanvasClickCapability>('canvas-click')
+import type { CanvasClickCapability } from '@silker/core'
 
 // 点击分发插件：画布 mousedown/click 绑定、拖拽阈值判定、命中测试与节点 onClick 分发。
+// 点击契约（CanvasClickCapability / CANVAS_CLICK_CAPABILITY）由 @silker/core 定义，
 // 独立绑定事件（不依赖 Pointer 能力），无任何插件时点击分发依然可用
 export class Clicker implements Plugin, CanvasClickCapability {
   // 拖拽判定阈值（屏幕像素）：位移超过该值视为拖拽而非点击。

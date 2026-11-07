@@ -1,11 +1,10 @@
 import type { App, Plugin } from "@silker/core";
-import { capabilityKey } from "@silker/core";
+import { selectionCapabilityKey } from "@silker/core";
 import type {
-  Bounds,
+  MarqueeRect as Bounds,
   SelectionCapability,
   SelectionChange,
-} from "./capability";
-import { selectionCapabilityKey } from "./capability";
+} from "@silker/core";
 import { MarqueeBand } from "./MarqueeBand";
 
 // 框选命中测试：返回与选框相交的条目（拖框中每帧、松手时调用）。
@@ -53,7 +52,7 @@ export class Selection<T> implements Plugin, SelectionCapability<T> {
     window.addEventListener("mousemove", this.onMove);
     window.addEventListener("mouseup", this.onUp);
     app.provide(
-      capabilityKey<SelectionCapability<unknown>>("selection"),
+      selectionCapabilityKey<unknown>(),
       this as unknown as SelectionCapability<unknown>,
     );
   }
@@ -184,5 +183,5 @@ export class Selection<T> implements Plugin, SelectionCapability<T> {
 }
 
 // 能力键重导出：消费方从此包取键
-export { selectionCapabilityKey } from "./capability";
-export type { Bounds, SelectionCapability, SelectionChange } from "./capability";
+export { selectionCapabilityKey } from "@silker/core";
+export type { MarqueeRect as Bounds, SelectionCapability, SelectionChange } from "@silker/core";

@@ -1,13 +1,13 @@
-// 指针交互插件入口
+// 指针交互插件入口：实现类在本包，契约（键与接口）由 @silker/core 定义，兼容重导出
+export { Pointer } from './Pointer'
+export { Clicker } from './Clicker'
 export {
-  Pointer,
   POINTER_CAPABILITY,
-  type Point,
-  type PointerCapability,
-  type PointerHandlers,
-} from './Pointer'
-export {
-  Clicker,
   CANVAS_CLICK_CAPABILITY,
-  type CanvasClickCapability,
-} from './Clicker'
+} from '@silker/core'
+export type {
+  Point,
+  PointerCapability,
+  PointerHandlers,
+  CanvasClickCapability,
+} from '@silker/core'

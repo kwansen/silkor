@@ -1,7 +1,8 @@
 // 历史记录插件回归测试：命令模式 undo/redo 双栈的执行、入栈、失效与容量语义。
 import { describe, expect, it, vi } from "vitest";
-import { History, compose } from "../src/history";
-import type { HistoryCommand } from "../src/history";
+import { History } from "../src/history";
+import { compose } from "@silker/core";
+import type { HistoryCommand } from "@silker/core";
 
 // 可记录调用序的命令桩
 function cmd(log: string[], tag: string): HistoryCommand {

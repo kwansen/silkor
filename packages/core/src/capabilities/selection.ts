@@ -1,8 +1,8 @@
-import { capabilityKey } from "@silker/core";
-import type { CapabilityKey } from "@silker/core";
+import { capabilityKey } from "../Capability"
+import type { CapabilityKey } from "../Capability"
 
-// 框选矩形（世界坐标）
-export interface Bounds {
+// 框选矩形（世界坐标）：与包围盒 Bounds（min/max 形）不同形，独立命名
+export interface MarqueeRect {
   x: number;
   y: number;
   width: number;
@@ -40,9 +40,9 @@ export interface SelectionCapability<T> {
   // 首帧成框回调（位移超阈值时触发一次）：适合清空既有选中态
   onMarqueeStart: (() => void) | null;
   // 拖框中每帧回调：rect 为当前选框（世界坐标），hits 为 hitRect 命中结果
-  onMarqueeMove: ((rect: Bounds, hits: T[]) => void) | null;
+  onMarqueeMove: ((rect: MarqueeRect, hits: T[]) => void) | null;
   // 松手回调：rect 为 null 表示未成框（普通点击）；hits 为成框时的命中结果
-  onMarqueeEnd: ((rect: Bounds | null, hits: T[]) => void) | null;
+  onMarqueeEnd: ((rect: MarqueeRect | null, hits: T[]) => void) | null;
 }
 
 // 能力键工厂：条目类型由消费方按场景标注（同一能力名 'selection'，

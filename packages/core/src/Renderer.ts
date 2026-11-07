@@ -50,7 +50,7 @@ export class Renderer {
     this.ctx.restore()
   }
 
-  private renderNodes(ctx: CanvasRenderingContext2D, nodes: Node[]) {
+  private renderNodes(ctx: CanvasRenderingContext2D, nodes: readonly Node[]) {
 
     for (const node of nodes) {
       if (!node.visible) continue

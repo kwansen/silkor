@@ -46,7 +46,13 @@ export abstract class Node {
   //#region 属性
   id: string | null = null
   parent: Node | null = null
-  children: Node[] = []
+  // 子节点的唯一可变存储：children 只作只读视图供遍历/查询（与 App.roots 同一收口策略，
+  // 直接 push/splice 会绕过结构事件），结构变更走 add/remove（事件版）或
+  // attachChild/detachChild（undo/redo 静默重放版）
+  private _children: Node[] = []
+  get children(): readonly Node[] {
+    return this._children
+  }
 
   x = 0
   y = 0
@@ -86,28 +92,65 @@ export abstract class Node {
     if (options.height === undefined) {
       this.autoHeight = true
     }
-    Object.assign(this, options)
+    // children/parent 是结构字段不来自 options：剔除以防自有属性遮蔽只读视图
+    const rest = { ...options } as Record<string, unknown>
+    delete rest.children
+    delete rest.parent
+    Object.assign(this, rest)
     this.id ??= crypto.randomUUID()
   }
   //#endregion
 
   //#region 添加
+  // 挂接子节点：先做环检查（把自己挂进自己的子树会使 parent 链成环，
+  // 变更冒泡与世界变换将无限递归），再断旧父（同一节点只挂在一处，
+  // 否则双父导致重复渲染/命中），移动语义 = remove + add
   add(node: Node) {
-    this.children.push(node)
+    if (node === this || this.isAncestorOf(node)) return
+    node.parent?.remove(node)
+    this._children.push(node)
     node.parent = this
     // 结构变更从父节点分发（子节点自身的订阅者不收自身 add），沿父链冒泡
     this.dispatchChange({ node, type: 'add' })
+  }
+
+  // node 是否为 this 的祖先（沿 parent 链上溯）
+  private isAncestorOf(node: Node): boolean {
+    for (let p = this.parent; p; p = p.parent) {
+      if (p === node) return true
+    }
+    return false
   }
   //#endregion
 
   //#region 移除
   remove(node: Node) {
-    const index = this.children.indexOf(node)
+    const index = this._children.indexOf(node)
     if (index === -1) return
-    this.children.splice(index, 1)
+    this._children.splice(index, 1)
     node.parent = null
     // 结构变更从父节点分发，沿父链冒泡通知祖先订阅者
     this.dispatchChange({ node, type: 'remove' })
+  }
+  //#endregion
+
+  //#region 静默结构原语（undo/redo 重放专用）
+  // 命令重放需按定格索引重建关系且不产生中间事件（事件由重放方在批处理完成后统一补发），
+  // 故提供不派发事件的挂接/摘除原语；状态自洽由重放方保证（不查环、不断旧父）
+
+  // 静默挂接：插入 index 处（越界钳制）并设 parent，不产生事件
+  attachChild(node: Node, index: number) {
+    const i = Math.max(0, Math.min(index, this._children.length))
+    this._children.splice(i, 0, node)
+    node.parent = this
+  }
+
+  // 静默摘除：摘出并置空 parent；不在 children 中则无操作
+  detachChild(node: Node) {
+    const i = this._children.indexOf(node)
+    if (i === -1) return
+    this._children.splice(i, 1)
+    node.parent = null
   }
   //#endregion
 

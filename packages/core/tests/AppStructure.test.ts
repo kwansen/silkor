@@ -151,6 +151,56 @@ describe("App.reorder", () => {
   });
 });
 
+describe("App.add/insert 挂接收口", () => {
+  it("把子级节点 add 为根：先从旧父摘除（移动语义），旧父不再持有它", () => {
+    const app = new App(createStubCanvas());
+    const parent = new TestNode();
+    const child = new TestNode();
+    parent.add(child);
+    app.add(parent);
+
+    const events: NodeChangeEvent[] = [];
+    app.onChange((e) => events.push(e));
+    app.add(child);
+
+    // 移动 = remove + add：观察者先看到旧父链上的摘除，再看到挂为根
+    expect(events).toEqual([
+      { node: child, type: "remove" },
+      { node: child, type: "add" },
+    ]);
+    expect([...app.children]).toEqual([parent, child]);
+    expect([...parent.children]).toEqual([]);
+    expect(child.parent).toBeNull();
+  });
+
+  it("重复 add 同一根节点幂等：不产生事件、不重复入列", () => {
+    const app = new App(createStubCanvas());
+    const a = new TestNode();
+    app.add(a);
+
+    const events: NodeChangeEvent[] = [];
+    app.onChange((e) => events.push(e));
+    app.add(a);
+    app.insert(a, 0);
+
+    expect(events).toEqual([]);
+    expect([...app.children]).toEqual([a]);
+  });
+
+  it("insert 已挂在他父下的节点：先摘除再按索引挂为根", () => {
+    const app = new App(createStubCanvas());
+    const parent = new TestNode();
+    const child = new TestNode();
+    parent.add(child);
+    app.add(parent);
+    app.insert(child, 0);
+
+    expect([...app.children]).toEqual([child, parent]);
+    expect([...parent.children]).toEqual([]);
+    expect(child.parent).toBeNull();
+  });
+});
+
 describe("App.addOverlay", () => {
   it("覆盖层加入场景并置于最上层，重复注册幂等", () => {
     const app = new App(createStubCanvas());

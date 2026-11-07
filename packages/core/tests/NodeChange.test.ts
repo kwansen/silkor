@@ -102,6 +102,58 @@ describe("Node 变更通知", () => {
       { node: leaf, type: "remove" },
     ]);
   });
+
+  it("挂接前先断旧父：重复挂接/换父不产生双父（移动语义 = remove + add）", () => {
+    const a = new TestNode();
+    const b = new TestNode();
+    const leaf = new TestNode();
+    a.add(leaf);
+
+    const events: NodeChangeEvent[] = [];
+    a.onChange((e) => events.push(e));
+    b.add(leaf); // leaf 已在 a 下：先从 a 摘除再挂到 b
+
+    expect(events).toEqual([{ node: leaf, type: "remove" }]);
+    expect([...a.children]).toEqual([]);
+    expect([...b.children]).toEqual([leaf]);
+    expect(leaf.parent).toBe(b);
+  });
+
+  it("环拒绝：把自己挂给自己、把祖先挂为子孙均无操作（parent 链不成环）", () => {
+    const root = new TestNode();
+    const child = new TestNode();
+    root.add(child);
+
+    const events: NodeChangeEvent[] = [];
+    root.onChange((e) => events.push(e));
+
+    root.add(root); // 自己挂给自己
+    child.add(root); // 把祖先挂为子孙
+
+    expect(events).toEqual([]);
+    expect([...root.children]).toEqual([child]);
+    expect([...child.children]).toEqual([]);
+    expect(child.parent).toBe(root);
+    expect(root.parent).toBeNull();
+  });
+
+  it("静默结构原语：attachChild/detachChild 只改关系不产生事件（undo/redo 重放用）", () => {
+    const parent = new TestNode();
+    const node = new TestNode();
+
+    const events: NodeChangeEvent[] = [];
+    parent.onChange((e) => events.push(e));
+
+    parent.attachChild(node, 0);
+    expect([...parent.children]).toEqual([node]);
+    expect(node.parent).toBe(parent);
+    expect(events).toEqual([]);
+
+    parent.detachChild(node);
+    expect([...parent.children]).toEqual([]);
+    expect(node.parent).toBeNull();
+    expect(events).toEqual([]);
+  });
 });
 
 describe("App 变更汇聚", () => {

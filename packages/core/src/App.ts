@@ -33,12 +33,17 @@ export class App {
   add(nodes: Node | Node[]) {
     const list = Array.isArray(nodes) ? nodes : [nodes]
     list.forEach(node => {
-      this.roots.push(node)
+      // 已是根级节点：幂等无操作（重复 add 收口在此，不再由调用方负责）
+      if (this.roots.includes(node)) return
+      // 节点若挂在他父之下：先摘除再挂为根（移动语义 remove + add），
+      // 否则旧父 children 仍持有它，形成双父（重复渲染/命中）
+      node.parent?.remove(node)
       node.parent = null
+      this.roots.push(node)
       this.watchRoot(node)
       // 覆盖层自动置顶先于事件：观察者看到的即最终绘制顺序
       this.raiseOverlays()
-      // 结构变更：app.add 同样产生 add 事件（幂等 use/uninstall 同理，重复 add 由调用方负责）
+      // 结构变更：app.add 同样产生 add 事件
       this.emitChange({ node, type: 'add' })
     })
   }
@@ -61,10 +66,13 @@ export class App {
   }
 
   // 按 z 序索引插入根级节点：undo/redo 按索引重放与分层插入（如连线层在形状层之下）共用。
-  // 与 add 一致：建立根监听、覆盖层自动置顶并产生 add 事件；索引越界自动钳制到 [0, length]
+  // 与 add 一致：已为根级时幂等无操作、节点挂在他父之下先摘除（移动语义）、
+  // 建立根监听、覆盖层自动置顶并产生 add 事件；索引越界自动钳制到 [0, length]
   insert(node: Node, index: number) {
-    this.roots.splice(Math.max(0, Math.min(index, this.roots.length)), 0, node)
+    if (this.roots.includes(node)) return
+    node.parent?.remove(node)
     node.parent = null
+    this.roots.splice(Math.max(0, Math.min(index, this.roots.length)), 0, node)
     this.watchRoot(node)
     this.raiseOverlays()
     this.emitChange({ node, type: 'add' })

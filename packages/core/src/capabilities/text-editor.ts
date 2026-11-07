@@ -25,6 +25,17 @@ export interface TextEditorCapability {
   bind(node: Node): void
   // 覆盖层是否持有焦点（未聚焦时键盘由外部全局处理器接管）
   hasFocus(): boolean
+
+  //#region 场景接线回调（可选，消费方赋值；实现方在对应时机触发）
+  // 输入同步：覆盖层文本变化（打字/IME/粘贴）后触发，携带当前编辑的文本节点
+  onInput?: (text: Text) => void
+  // 编辑框就绪：覆盖层挂载并聚焦后触发，消费可绑定按键/两态机
+  onEditStart?: (el: HTMLDivElement, text: Text) => void
+  // 编辑结束：覆盖层失焦/提交后触发
+  onEditEnd?: () => void
+  // 节点点击激活：bind 绑定的文本节点被点击时触发
+  onActivate?: (text: Text) => void
+  //#endregion
 }
 
 // 能力键：导出供消费方查询

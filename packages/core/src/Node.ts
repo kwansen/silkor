@@ -31,6 +31,17 @@ export interface Bounds {
   maxY: number
 }
 
+// 变更类型：change 为属性变更（markChanged），add/remove 为子树结构变更
+export type NodeChangeType = 'change' | 'add' | 'remove'
+
+// 变更事件：node 为发生变更的节点，prop 仅 change 时有意义
+// （可缺省表示批量回写或未知来源，如布局引擎一次性回写多个属性）
+export interface NodeChangeEvent {
+  node: Node
+  type: NodeChangeType
+  prop?: string
+}
+
 export abstract class Node {
   //#region 属性
   id: string | null = null
@@ -84,6 +95,8 @@ export abstract class Node {
   add(node: Node) {
     this.children.push(node)
     node.parent = this
+    // 结构变更从父节点分发（子节点自身的订阅者不收自身 add），沿父链冒泡
+    this.dispatchChange({ node, type: 'add' })
   }
   //#endregion
 
@@ -93,6 +106,30 @@ export abstract class Node {
     if (index === -1) return
     this.children.splice(index, 1)
     node.parent = null
+    // 结构变更从父节点分发，沿父链冒泡通知祖先订阅者
+    this.dispatchChange({ node, type: 'remove' })
+  }
+  //#endregion
+
+  //#region 变更通知
+  // 多槽订阅（返回解绑函数）；变更沿父链冒泡——订阅任一祖先即可收到整个子树的变更
+  private changeSubs = new Set<(e: NodeChangeEvent) => void>()
+
+  onChange(cb: (e: NodeChangeEvent) => void): () => void {
+    this.changeSubs.add(cb)
+    return () => {
+      this.changeSubs.delete(cb)
+    }
+  }
+
+  // 变更提交原语：改完属性后调一次（x/y/visible 等仍是普通字段直接写，通知为自愿提交）
+  markChanged(prop?: string) {
+    this.dispatchChange({ node: this, type: 'change', prop })
+  }
+
+  private dispatchChange(e: NodeChangeEvent) {
+    for (const cb of this.changeSubs) cb(e)
+    this.parent?.dispatchChange(e)
   }
   //#endregion
 

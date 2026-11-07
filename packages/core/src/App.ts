@@ -1,4 +1,4 @@
-import type { Node } from "./Node"
+import type { Node, NodeChangeEvent } from "./Node"
 import type { Plugin } from "./Plugin"
 import { Renderer } from "./Renderer"
 import { Camera } from "./Camera"
@@ -30,6 +30,9 @@ export class App {
     list.forEach(node => {
       this.children.push(node)
       node.parent = null
+      this.watchRoot(node)
+      // 结构变更：app.add 同样产生 add 事件（幂等 use/uninstall 同理，重复 add 由调用方负责）
+      this.emitChange({ node, type: 'add' })
     })
   }
 
@@ -48,6 +51,33 @@ export class App {
       this.render()
     })
   }
+
+  //#region 变更通知
+  // 应用级变更汇聚：节点变更沿父链冒泡到根，App 只监听根即可收到整个子树的变更，
+  // 并自动触发渲染——消费方改属性 + node.markChanged() 即可，无需再手动 requestRender
+  private changeSubs = new Set<(e: NodeChangeEvent) => void>()
+  // 根节点 → 变更监听解绑函数（重复 add 同一根时避免重复订阅）
+  private rootUnsubs = new Map<Node, () => void>()
+
+  // 应用级变更订阅（结构变更 + 全部节点变更的汇聚），返回解绑函数
+  onChange(cb: (e: NodeChangeEvent) => void): () => void {
+    this.changeSubs.add(cb)
+    return () => {
+      this.changeSubs.delete(cb)
+    }
+  }
+
+  private emitChange(e: NodeChangeEvent) {
+    for (const cb of this.changeSubs) cb(e)
+    // 变更后统一走 rAF 合帧渲染
+    this.requestRender()
+  }
+
+  private watchRoot(node: Node) {
+    if (this.rootUnsubs.has(node)) return
+    this.rootUnsubs.set(node, node.onChange(e => this.emitChange(e)))
+  }
+  //#endregion
 
   use(plugin: Plugin) {
     // 幂等：重复 use 同一插件无副作用

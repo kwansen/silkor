@@ -70,6 +70,8 @@ export class Viewport implements Plugin, ViewportCapability {
       y: rect.height / 2 - cy * scale,
       scale,
     })
+    // 相机-only 变更：走快速路径；相机大跳变时覆盖判定必失败，内部自动转全量
+    this.app.requestCameraRender()
   }
 
   // 滚轮缩放：以鼠标所在位置为中心调整缩放并重渲染
@@ -86,7 +88,8 @@ export class Viewport implements Plugin, ViewportCapability {
     const scale = Math.min(8, Math.max(0.2, vp.scale * (e.deltaY > 0 ? 0.9 : 1.1)))
     // 保持鼠标下的世界坐标不变，反推新的平移量
     app.camera.setViewport({ x: mx - wx * scale, y: my - wy * scale, scale })
-    app.requestRender()
+    // 相机-only 变更：走快照 blit 快速路径，不遍历节点树
+    app.requestCameraRender()
   }
 
   // 鼠标按下：仅右键进入拖拽（左键默认行为留给选择、节点拖拽等交互方）
@@ -113,7 +116,8 @@ export class Viewport implements Plugin, ViewportCapability {
     this.lastX = e.clientX
     this.lastY = e.clientY
     app.camera.setViewport({ ...vp, x, y })
-    app.requestRender()
+    // 相机-only 变更：走快照 blit 快速路径，不遍历节点树
+    app.requestCameraRender()
   }
 
   // 鼠标松开：结束拖拽并恢复默认光标

@@ -120,14 +120,33 @@ export class App {
   //#endregion
 
   // rAF 合帧渲染：一帧内多次请求合并为一次绘制。平移/缩放/输入等高频事件只请求
-  // 不直接绘制，把「每事件一绘」的全量重绘降为「每帧最多一绘」
-  private renderScheduled = false
+  // 不直接绘制，把「每事件一绘」的全量重绘降为「每帧最多一绘」。
+  // 两种模式：full = 全量渲染（同时刷新快照位图）；camera = 相机-only 快速路径
+  // （场景未变，只差量 blit 快照，不遍历节点树）。同帧合并规则：full 覆盖 camera
+  // （场景变更优先级高于相机 blit，合并后按 full 渲染即同时刷新快照）
+  private pendingRender: 'none' | 'camera' | 'full' = 'none'
+  private frameScheduled = false
   requestRender() {
-    if (this.renderScheduled) return
-    this.renderScheduled = true
+    this.enqueueRender('full')
+  }
+
+  // 相机-only 渲染请求：平移/缩放等只改相机不改场景的高频路径调用；
+  // 快照不可用或判定不满足时 Renderer.renderFromCache 内部自动转全量（rebase）
+  requestCameraRender() {
+    this.enqueueRender('camera')
+  }
+
+  private enqueueRender(mode: 'camera' | 'full') {
+    this.pendingRender =
+      mode === 'full' || this.pendingRender === 'full' ? 'full' : 'camera'
+    if (this.frameScheduled) return
+    this.frameScheduled = true
     requestAnimationFrame(() => {
-      this.renderScheduled = false
-      this.render()
+      this.frameScheduled = false
+      const m = this.pendingRender
+      this.pendingRender = 'none'
+      if (m === 'full') this.render()
+      else if (m === 'camera') this.renderer.renderFromCache(this.roots)
     })
   }
 

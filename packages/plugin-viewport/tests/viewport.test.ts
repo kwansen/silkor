@@ -49,7 +49,23 @@ beforeEach(() => {
   });
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
   vi.stubGlobal("window", Object.assign(fakeWindow, { devicePixelRatio: 1 }));
+  // 快照位图缓存需要离屏画布：node 环境补最小 document 桩（渲染管线只写不读）
+  vi.stubGlobal("document", {
+    createElement: () => ({
+      width: 0,
+      height: 0,
+      getContext: () =>
+        new Proxy({}, { get: (_t, p) => (p === "globalAlpha" ? 1 : () => {}), set: () => true }),
+    }),
+  });
 });
+
+// 手动 flush rAF 队列（渲染在帧回调里执行）
+function flushRaf() {
+  const q = [...rafQueue];
+  rafQueue.length = 0;
+  q.forEach((cb) => cb());
+}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -140,6 +156,32 @@ describe("Viewport", () => {
     expect(app.camera.scale).toBeCloseTo(0.2);
     expect(app.camera.x).toBeCloseTo(50 - 50 * 0.2); // 中心 (50,25) 对齐画布中心
     expect(app.camera.y).toBeCloseTo(50 - 25 * 0.2);
+  });
+
+  it("滚轮缩放与拖拽平移走相机快速路径（不触发全量重绘）", () => {
+    const { app, canvas } = setup();
+    app.render(); // 建立快照基准（此后渲染走 renderFromCache）
+    const renderSpy = vi.spyOn(app.renderer, "render");
+    const cacheSpy = vi.spyOn(app.renderer, "renderFromCache");
+
+    canvas.dispatch("wheel", {
+      clientX: 50,
+      clientY: 50,
+      deltaY: -100,
+      preventDefault: () => {},
+      currentTarget: canvas,
+    });
+    expect(rafQueue.length).toBe(1); // 请求经 rAF 合帧
+    flushRaf();
+    expect(cacheSpy).toHaveBeenCalledTimes(1);
+    // 缩放 1.1 倍在快照放大门限内：只 blit，不重绘节点树
+    expect(renderSpy).not.toHaveBeenCalled();
+
+    canvas.dispatch("mousedown", { button: 2, clientX: 100, clientY: 100, preventDefault: () => {} });
+    fakeWindow.dispatch("mousemove", { clientX: 150, clientY: 120 });
+    flushRaf();
+    expect(cacheSpy).toHaveBeenCalledTimes(2);
+    expect(renderSpy).not.toHaveBeenCalled();
   });
 
   it("dispose 撤销全部监听并复位状态；重复 dispose 幂等", () => {

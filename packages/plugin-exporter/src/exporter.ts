@@ -62,6 +62,9 @@ export class Exporter implements Plugin {
     // （render() 会叠加 camera.scale，基准再乘 scale 会导致双重放大、内容被裁切）
     const camera = new Camera(canvas);
     const renderer = new Renderer(canvas, camera);
+    // 导出须精确直绘到本画布：关闭快照位图缓存（避免多创建一张离屏快照画布，
+    // 且快照路径经由 blit 呈现会改变「render 后画布透明」的 destination-over 前提）
+    renderer.snapshotEnabled = false;
     canvas.width = Math.ceil(w * scale);
     canvas.height = Math.ceil(h * scale);
     renderer.width = canvas.width;

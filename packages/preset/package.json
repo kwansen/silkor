@@ -1,0 +1,44 @@
+{
+  "name": "@silker/preset",
+  "version": "1.0.0",
+  "description": "官方插件预设装配（单一事实来源）：官方场景便捷模式与宿主显式装配共用同一套官方外部插件",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@silker/core": "workspace:*",
+    "@silker/plugin-command": "workspace:*",
+    "@silker/plugin-exporter": "workspace:*",
+    "@silker/plugin-history": "workspace:*",
+    "@silker/plugin-interaction": "workspace:*",
+    "@silker/plugin-selection": "workspace:*",
+    "@silker/plugin-text-editor": "workspace:*",
+    "@silker/plugin-viewport": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.2"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "^11.21.0",
+      "onFail": "download"
+    }
+  }
+}

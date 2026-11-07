@@ -32,6 +32,10 @@ export interface SelectionCapability<T> {
   // 选中变化回调（set/clear 触发；框选不直接改模型，由消费方在 onMarqueeEnd 里调用 set）
   onChange: ((change: SelectionChange<T>) => void) | null;
 
+  // 框选命中规则（消费方按场景赋值）：拖框中每帧与松手时对当前选框做命中测试，
+  // 返回命中条目；未赋值时框选无命中结果
+  hitRect: (rect: MarqueeRect) => T[];
+
   // 开启框选会话：宿主在空白按下时调用（传入按下事件），插件接管后续 window
   // mousemove/mouseup 直至松手；位移超过 3 屏幕像素才成框（区分点击与拖框）
   beginMarquee(e: MouseEvent): void;

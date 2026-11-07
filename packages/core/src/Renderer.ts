@@ -10,7 +10,10 @@ import type { Camera } from "./Camera"
 // 主画布只做一次差量 drawImage，不遍历节点树。快照失效逻辑 = 全量渲染即刷新。
 // rebase（平移超出余量/放大超倍率）不同步转全量：当帧先按当前相机映射呈现旧位图
 // （新露出的边缘短暂露底 / 放大短暂模糊 1-2 帧），全量重拍经 onRebaseNeeded 异步
-// 落帧执行——同步全量会把大场景单次 100ms+ 的光栅化阻塞进拖拽/缩放帧
+// 落帧执行——同步全量会把大场景单次 100ms+ 的光栅化阻塞进拖拽/缩放帧。
+// 停止锐化：门限内的放大呈现（模糊可接受）在连续缩放期间不重拍，但缩放结束后
+// 必须重拍锐化，否则模糊位图残留——放大倍率超过 sharpenUpscale 即请求异步
+// rebase，宿主合帧调度自然将其落到缩放停止后的静默帧
 //
 // 场景/覆盖层分离：快照只含场景节点；交互覆盖层（高亮环/拖拽虚影/选框等）在每次
 // 呈现时直接画在主画布上。覆盖层自身的微小视觉变化（如激活高亮环）因此只需
@@ -34,6 +37,11 @@ export class Renderer {
   // blit 放大倍率门限：快照映射到主画布的放大倍率超过该值即 rebase 全量重渲染
   // （防累积模糊；缩小采样不会糊，不设下限）
   maxSnapshotUpscale = 1.5
+  // 停止锐化阈值：放大呈现超过该倍率即请求异步 rebase（复用同一重拍调度）。
+  // 门限内的放大呈现模糊可接受（连续缩放期间不重拍），但缩放结束后没有任何
+  // 其他触发点，模糊位图会残留——超过可感知倍率就提前请求，落到静默帧锐化。
+  // 缩小采样（a < 1）不糊不触发；纯平移（a = 1）不触发
+  sharpenUpscale = 1.05
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -179,6 +187,10 @@ export class Renderer {
     }
     this.presentFromCache(a, Math.round(tx), Math.round(ty))
     this.drawOverlays(overlays)
+    // 停止锐化：门限内的放大呈现本帧可接受，但超过可感知倍率时提前请求
+    // 异步 rebase——连续缩放期间被宿主推迟，缩放停止后的静默帧完成重拍锐化，
+    // 模糊位图不残留（缩小采样 a < 1 不糊，不触发）
+    if (a > this.sharpenUpscale) this.requestRebase(scene, overlays)
   }
 
   // 原直绘路径：清屏 + 相机变换 + 递归绘制节点树 + 覆盖层（快照降级/exporter 直绘用）

@@ -144,18 +144,38 @@ describe("Renderer 快照位图缓存", () => {
     expect(lastPresentTransform(calls)).toEqual([1, 0, 0, 1, -256, -256]);
   });
 
-  it("缩放超放大倍率门限转异步 rebase；门限内走快速路径", () => {
+  it("缩放超放大倍率门限转异步 rebase；门限内放大当帧旧位图、缩放停止后锐化重拍", () => {
     const { app, calls } = setup();
     app.render();
-    // scale 1 → 2：a = 2 > 1.5 → 当帧旧位图放大呈现（短暂模糊），rebase 异步执行
+    const renderSpy = vi.spyOn(app.renderer, "render");
+    rafQueue.length = 0; // 清掉构造/初始渲染可能排入的帧，只统计后续请求
+    // scale 1 → 2：a = 2 > 1.5 → 当帧旧位图放大呈现（短暂模糊），rebase 异步执行，
+    // 不同步全量（a=2，tx=-512）
     app.camera.setViewport({ x: 0, y: 0, scale: 2 });
     app.renderer.renderFromCache(app.children.slice());
-    expect(createdCanvases.length).toBe(1); // 未同步重建快照
-    rafQueue.forEach((cb) => cb()); // 异步 rebase 落帧：基准复位为 scale=2
-    // scale 2 → 2.5：a = 1.25 ≤ 1.5 → blit；tx = 0 - 1.25*256 - 1*(2.5/2)*0 = -320
+    expect(lastPresentTransform(calls)).toEqual([2, 0, 0, 2, -512, -512]);
+    expect(renderSpy).not.toHaveBeenCalled();
+    rafQueue.forEach((cb) => cb()); // 异步 rebase 落帧：全量重拍，基准复位为 scale=2
+    expect(renderSpy).toHaveBeenCalledTimes(1);
+    // scale 2 → 2.5：a = 1.25 ≤ 1.5 走快速路径，当帧旧位图呈现
+    // tx = 0 - 1.25*256 - 1*(2.5/2)*0 = -320
     app.camera.setViewport({ x: 0, y: 0, scale: 2.5 });
+    renderSpy.mockClear();
     app.renderer.renderFromCache(app.children.slice());
     expect(lastPresentTransform(calls)).toEqual([1.25, 0, 0, 1.25, -320, -320]);
+    expect(renderSpy).not.toHaveBeenCalled(); // 门限内当帧不重拍
+    // 停止锐化：a = 1.25 > sharpenUpscale 已请求异步 rebase，落帧后全量重拍、
+    // 基准复位为 scale=2.5（缩放结束后模糊位图不残留）
+    rafQueue.forEach((cb) => cb());
+    expect(renderSpy).toHaveBeenCalledTimes(1);
+    // 复位后纯平移（a = 1）恢复 1:1 blit，不再触发锐化重拍
+    app.camera.setViewport({ x: 30, y: 0, scale: 2.5 });
+    app.renderer.renderFromCache(app.children.slice());
+    expect(lastPresentTransform(calls)).toEqual([1, 0, 0, 1, 30 - 256, -256]);
+    renderSpy.mockClear();
+    rafQueue.length = 0; // 清空锐化队列，断言纯平移不请求重拍
+    app.renderer.renderFromCache(app.children.slice());
+    expect(rafQueue.length).toBe(0);
   });
 
   it("主画布尺寸变化后 renderFromCache 转全量并重建快照", () => {

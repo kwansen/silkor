@@ -70,7 +70,8 @@ export class Viewport implements Plugin, ViewportCapability {
       y: rect.height / 2 - cy * scale,
       scale,
     })
-    // 相机-only 变更：走快速路径；相机大跳变时覆盖判定必失败，内部自动转全量
+    // 相机-only 变更：走快速路径；相机大跳变时覆盖判定必失败，当帧呈现旧位图，
+    // 全量重拍经 requestRender 异步落帧（不阻塞当前帧）
     this.app.requestCameraRender()
   }
 

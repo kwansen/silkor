@@ -21,6 +21,11 @@ export class App {
     this.canvas = canvas
     this.camera = new Camera(canvas)
     this.renderer = new Renderer(canvas, this.camera)
+    // 异步 rebase 接线：相机-only 快路径判定失败（平移超出余量/放大超倍率）时，
+    // 渲染器当帧先呈现旧位图，全量重拍经 requestRebaseRender 排入 rAF 合帧队列，
+    // 连续拖拽/缩放期间推迟到相机静默帧执行（全量重拍不改变已呈现内容，静默时
+    // 执行感知为零）；执行时取最新节点列表与相机状态重光栅化并复位快照基准
+    this.renderer.onRebaseNeeded = () => this.requestRebaseRender()
     // 天空层（sky）：交互覆盖层（高亮环/选框/虚影等）绘制在叠放于场景画布之上的
     // 独立透明画布，覆盖层变更只重绘该层，场景画布（树层）完全不动；
     // ground 背景层为后续预留位。无父容器（测试/离屏）时退化为无天空层
@@ -173,13 +178,30 @@ export class App {
   // camera = 相机-only（树层差量 blit + 重绘 sky）；overlay = 仅重绘 sky（树层完全不动）
   private pendingRender: 'none' | 'overlay' | 'camera' | 'full' = 'none'
   private frameScheduled = false
+  // rebase 全量可推迟标记：rebase（快路径判定失败触发的全量重拍）在连续相机变更
+  // 期间推迟到静默帧；内容变更触发的 full（requestRender）不推迟——画面内容已变，
+  // 必须立即重绘
+  private rebasePending = false
+  // 本帧相机是否变更过（requestCameraRender 置位，runFrame 读取后清除）
+  private cameraDirty = false
   requestRender() {
+    // 内容变更全量：覆盖 rebase 意向，立即执行不推迟
+    this.rebasePending = false
+    this.enqueueRender('full')
+  }
+
+  // rebase 请求入口（Renderer.onRebaseNeeded 接线）：与 requestRender 同为全量渲染，
+  // 但连续相机变更期间由 runFrame 推迟到静默帧执行
+  requestRebaseRender() {
+    this.rebasePending = true
     this.enqueueRender('full')
   }
 
   // 相机-only 渲染请求：平移/缩放等只改相机不改场景的高频路径调用；
-  // 快照不可用或判定不满足时 Renderer.renderFromCache 内部自动转全量（rebase）
+  // 覆盖判定/质量门不满足时 Renderer.renderFromCache 呈现旧位图并经本方法
+  // 异步触发全量渲染（rebase），当帧不阻塞
   requestCameraRender() {
+    this.cameraDirty = true
     this.enqueueRender('camera')
   }
 
@@ -201,17 +223,33 @@ export class App {
     }
     if (this.frameScheduled) return
     this.frameScheduled = true
-    requestAnimationFrame(() => {
-      this.frameScheduled = false
-      const m = this.pendingRender
-      this.pendingRender = 'none'
-      if (m === 'full') this.render()
-      else if (m === 'camera')
-        this.renderer.renderFromCache(this.sceneNodes(), this.overlayList())
-      else if (m === 'overlay') {
-        if (!this.renderer.renderSky(this.overlayList())) this.render()
-      }
-    })
+    requestAnimationFrame(this.runFrame)
+  }
+
+  // 帧执行：full = 全量渲染；camera = 树层差量 blit + 重绘 sky；overlay = 仅重绘 sky。
+  // rebase 全量遇连续相机变更时推迟到静默帧——本帧相机呈现不能停，直接走快路径
+  // 用旧位图顶着，保证拖拽/缩放画面逐帧更新、不被 100ms+ 的全量重拍冻结
+  private runFrame = () => {
+    this.frameScheduled = false
+    const cameraMoved = this.cameraDirty
+    this.cameraDirty = false
+    const m = this.pendingRender
+    this.pendingRender = 'none'
+    if (m === 'full' && this.rebasePending && cameraMoved) {
+      // 推迟 rebase：保留 full 意向到下一帧；本帧先做相机呈现
+      this.pendingRender = 'full'
+      this.frameScheduled = true
+      requestAnimationFrame(this.runFrame)
+      this.renderer.renderFromCache(this.sceneNodes(), this.overlayList())
+      return
+    }
+    this.rebasePending = false
+    if (m === 'full') this.render()
+    else if (m === 'camera')
+      this.renderer.renderFromCache(this.sceneNodes(), this.overlayList())
+    else if (m === 'overlay') {
+      if (!this.renderer.renderSky(this.overlayList())) this.render()
+    }
   }
 
   //#region 变更通知

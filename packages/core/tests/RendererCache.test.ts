@@ -128,25 +128,30 @@ describe("Renderer 快照位图缓存", () => {
     expect(lastPresentTransform(calls)).toEqual([1, 0, 0, 1, -246, -251]);
   });
 
-  it("累计平移超出余量转全量（rebase），基准复位后恢复快速路径", () => {
+  it("累计平移超出余量转异步 rebase：当帧旧位图呈现，下一帧全量复位基准", () => {
     const { app, calls } = setup();
     app.render();
-    // 平移 300 > 余量 256：tx = 300 - 256 = 44 > 0 → 覆盖判定失败 → rebase
+    // 平移 300 > 余量 256：覆盖判定失败 → 当帧呈现旧位图（tx = 300 - 256 = 44 > 0，
+    // 右缘露底），不同步重光栅化，rebase 经 rAF 异步执行
     app.camera.setViewport({ x: 300, y: 0, scale: 1 });
     app.renderer.renderFromCache(app.children.slice());
-    expect(createdCanvases.length).toBe(1); // rebase 复用同尺寸快照，不重建
-    // 基准已复位为 (300,0)：再次请求时 tx = 300 - 256 - 300 = -256 → 快速路径 blit
+    expect(lastPresentTransform(calls)).toEqual([1, 0, 0, 1, 44, -256]);
+    expect(createdCanvases.length).toBe(1); // 未同步重建快照
+    // 异步 rebase 落帧：全量渲染，基准复位为 (300,0)
+    rafQueue.forEach((cb) => cb());
+    // 基准复位后恢复快速路径：tx = 300 - 256 - 300 = -256 → blit
     app.renderer.renderFromCache(app.children.slice());
     expect(lastPresentTransform(calls)).toEqual([1, 0, 0, 1, -256, -256]);
   });
 
-  it("缩放超放大倍率门限转全量；门限内走快速路径", () => {
+  it("缩放超放大倍率门限转异步 rebase；门限内走快速路径", () => {
     const { app, calls } = setup();
     app.render();
-    // scale 1 → 2：a = 2 > 1.5 → rebase（基准复位为 scale=2）
+    // scale 1 → 2：a = 2 > 1.5 → 当帧旧位图放大呈现（短暂模糊），rebase 异步执行
     app.camera.setViewport({ x: 0, y: 0, scale: 2 });
     app.renderer.renderFromCache(app.children.slice());
-    expect(createdCanvases.length).toBe(1);
+    expect(createdCanvases.length).toBe(1); // 未同步重建快照
+    rafQueue.forEach((cb) => cb()); // 异步 rebase 落帧：基准复位为 scale=2
     // scale 2 → 2.5：a = 1.25 ≤ 1.5 → blit；tx = 0 - 1.25*256 - 1*(2.5/2)*0 = -320
     app.camera.setViewport({ x: 0, y: 0, scale: 2.5 });
     app.renderer.renderFromCache(app.children.slice());

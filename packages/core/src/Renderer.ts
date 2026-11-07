@@ -8,6 +8,9 @@ import type { Camera } from "./Camera"
 // 余量的离屏快照（offscreen-primary），主画布用一次整数偏移的 1:1 drawImage 呈现
 // 中心区域；相机-only 变更（平移/缩放，场景未变）走 renderFromCache 快速路径——
 // 主画布只做一次差量 drawImage，不遍历节点树。快照失效逻辑 = 全量渲染即刷新。
+// rebase（平移超出余量/放大超倍率）不同步转全量：当帧先按当前相机映射呈现旧位图
+// （新露出的边缘短暂露底 / 放大短暂模糊 1-2 帧），全量重拍经 onRebaseNeeded 异步
+// 落帧执行——同步全量会把大场景单次 100ms+ 的光栅化阻塞进拖拽/缩放帧
 //
 // 场景/覆盖层分离：快照只含场景节点；交互覆盖层（高亮环/拖拽虚影/选框等）在每次
 // 呈现时直接画在主画布上。覆盖层自身的微小视觉变化（如激活高亮环）因此只需
@@ -106,7 +109,9 @@ export class Renderer {
   }
 
   // 相机-only / 覆盖层-only 快速路径：场景位图未变，从快照差量 blit 呈现并重画
-  // 覆盖层；任一有效性判定不满足时自动转全量渲染（rebase），调用方无需关心结果
+  // 覆盖层。快照缺失/主画布尺寸不符等硬性不满足时同步转全量；覆盖判定失败（平移
+  // 超出余量）与质量门超限（放大超倍率）时当帧呈现旧位图，rebase 异步执行（见
+  // requestRebase）——同步全量会阻塞当前帧，调用方无需关心结果
   renderFromCache(scene: Node[], overlays: Node[] = []) {
     if (
       !this.snapshotEnabled ||
@@ -138,18 +143,38 @@ export class Renderer {
     const a = (dpr * s1) / (dprSnap * s0)
     const tx = dpr * x1 - a * md - dpr * (s1 / s0) * x0
     const ty = dpr * y1 - a * md - dpr * (s1 / s0) * y0
-    // 覆盖判定：映射后的位图必须盖满主画布（无空边），否则平移已超出余量 → rebase
+    // 覆盖判定：映射后的位图必须盖满主画布（无空边）。平移已超出余量时走
+    // 「旧位图顶帧 + 异步 rebase」：当帧按当前相机映射呈现旧位图（新露出边缘
+    // 短暂露底），全量重拍由宿主推迟到相机静默帧执行（连续拖拽期间不阻塞）。
+    // 露底宽度过大（连续长距离平移超过 2 倍余量仍未静默）时同步兜底重拍，
+    // 避免画面大面积空白
     if (
       !(tx <= 0 && ty <= 0) ||
       tx + a * bmpW < this.canvas.width ||
       ty + a * bmpH < this.canvas.height
     ) {
-      this.render(scene, overlays)
+      const gap = Math.max(
+        tx,
+        ty,
+        this.canvas.width - (tx + a * bmpW),
+        this.canvas.height - (ty + a * bmpH),
+        0,
+      )
+      if (gap > md * 2) {
+        this.render(scene, overlays)
+        return
+      }
+      this.presentFromCache(a, Math.round(tx), Math.round(ty))
+      this.drawOverlays(overlays)
+      this.requestRebase(scene, overlays)
       return
     }
-    // 质量门：放大倍率超限即 rebase（防累积模糊）
+    // 质量门：放大倍率超限防累积模糊。此时位图仍盖满主画布（覆盖判定已通过），
+    // 当帧先用旧位图按映射倍率呈现（短暂模糊换不掉帧），rebase 异步执行
     if (a > this.maxSnapshotUpscale) {
-      this.render(scene, overlays)
+      this.presentFromCache(a, Math.round(tx), Math.round(ty))
+      this.drawOverlays(overlays)
+      this.requestRebase(scene, overlays)
       return
     }
     this.presentFromCache(a, Math.round(tx), Math.round(ty))
@@ -216,6 +241,28 @@ export class Renderer {
     bmpW: number; bmpH: number            // 快照位图物理尺寸
     mainW: number; mainH: number          // 捕获时主画布物理尺寸（一致性校验用）
   } | null = null
+
+  //#region 异步 rebase 调度
+  // rebase 通知（可选宿主接线）：覆盖判定失败/质量门超限时由渲染器调用，宿主负责
+  // 安排异步全量渲染。App 接线到 requestRender（rAF 合帧，full 优先级最高，执行时
+  // 取最新节点列表与相机状态）；未接线（裸渲染器/测试）时内部 rAF 兜底，捕获当帧
+  // 节点列表
+  onRebaseNeeded: ((scene: Node[], overlays: Node[]) => void) | null = null
+  private rebaseScheduled = false
+
+  private requestRebase(scene: Node[], overlays: Node[]) {
+    if (this.onRebaseNeeded) {
+      this.onRebaseNeeded(scene, overlays)
+      return
+    }
+    if (this.rebaseScheduled) return
+    this.rebaseScheduled = true
+    requestAnimationFrame(() => {
+      this.rebaseScheduled = false
+      this.render(scene, overlays)
+    })
+  }
+  //#endregion
 
   // 惰性创建/重建快照画布；不可用（无 document / getContext null / 异常）时
   // 粘性置 snapshotEnabled = false 并返回 false，此后永久走直绘

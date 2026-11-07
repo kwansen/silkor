@@ -1,4 +1,4 @@
-import type { Node, NodeChangeEvent } from "./Node"
+﻿import type { Node, NodeChangeEvent } from "./Node"
 import type { Plugin } from "./Plugin"
 import { Renderer } from "./Renderer"
 import { Camera } from "./Camera"
@@ -21,13 +21,50 @@ export class App {
     this.canvas = canvas
     this.camera = new Camera(canvas)
     this.renderer = new Renderer(canvas, this.camera)
+    // 天空层（sky）：交互覆盖层（高亮环/选框/虚影等）绘制在叠放于场景画布之上的
+    // 独立透明画布，覆盖层变更只重绘该层，场景画布（树层）完全不动；
+    // ground 背景层为后续预留位。无父容器（测试/离屏）时退化为无天空层
+    this.renderer.sky = this.createSkyCanvas(canvas)
+    this.syncSky()
     // 容器尺寸变化：同步画布物理尺寸并重绘（ResizeObserver 首次观察也触发一次，等价重绘无副作用）
     new ResizeObserver(() => {
+      this.syncSky()
       this.renderer.resize()
       this.render()
     }).observe(canvas)
     // 画布点击分发（拖拽阈值判定/命中测试/空白点击）由 plugin-interaction 的
     // Clicker 插件承担：core 只保留渲染与能力机制
+  }
+
+  // 创建天空层画布：叠放于场景画布之上（DOM 次序在其后），不接收指针事件
+  // （命中/手势仍落在场景画布上）
+  private createSkyCanvas(canvas: HTMLCanvasElement): HTMLCanvasElement | null {
+    try {
+      if (typeof document === 'undefined') return null
+      const parent = canvas.parentElement
+      if (!parent || typeof parent.appendChild !== 'function') return null
+      const sky = document.createElement('canvas')
+      if (typeof getComputedStyle === 'function' && getComputedStyle(parent).position === 'static') {
+        parent.style.position = 'relative'
+      }
+      sky.style.position = 'absolute'
+      sky.style.pointerEvents = 'none'
+      parent.appendChild(sky)
+      return sky
+    } catch {
+      return null
+    }
+  }
+
+  // 天空层与场景画布几何对齐（位置/尺寸随容器变化，ResizeObserver 回调同步）
+  private syncSky() {
+    const sky = this.renderer.sky
+    if (!sky) return
+    sky.style.left = `${this.canvas.offsetLeft}px`
+    sky.style.top = `${this.canvas.offsetTop}px`
+    const rect = this.canvas.getBoundingClientRect()
+    sky.style.width = `${rect.width}px`
+    sky.style.height = `${rect.height}px`
   }
 
   add(nodes: Node | Node[]) {
@@ -132,10 +169,9 @@ export class App {
 
   // rAF 合帧渲染：一帧内多次请求合并为一次绘制。平移/缩放/输入等高频事件只请求
   // 不直接绘制，把「每事件一绘」的全量重绘降为「每帧最多一绘」。
-  // 两种模式：full = 全量渲染（同时刷新快照位图）；camera = 相机-only 快速路径
-  // （场景未变，只差量 blit 快照，不遍历节点树）。同帧合并规则：full 覆盖 camera
-  // （场景变更优先级高于相机 blit，合并后按 full 渲染即同时刷新快照）
-  private pendingRender: 'none' | 'camera' | 'full' = 'none'
+  // 三种模式（同帧合并取最高优先级）：full = 全量渲染（重新光栅化树层快照 + 重绘 sky）；
+  // camera = 相机-only（树层差量 blit + 重绘 sky）；overlay = 仅重绘 sky（树层完全不动）
+  private pendingRender: 'none' | 'overlay' | 'camera' | 'full' = 'none'
   private frameScheduled = false
   requestRender() {
     this.enqueueRender('full')
@@ -148,15 +184,21 @@ export class App {
   }
 
   // 覆盖层-only 渲染请求：高亮环/选框/拖拽虚影等交互覆盖层的视觉变化调用——
-  // 场景位图未变，只需 blit 快照 + 重画覆盖层（与相机快速路径同一条执行链，
-  // 区别仅在语义：一个源于相机移动，一个源于覆盖层状态变化）
+  // 只重绘天空层（sky），场景画布（树层）与快照完全不动；
+  // 天空层不可用（测试/离屏）时 Renderer.renderSky 返回 false，退化为全量渲染
   requestOverlayRender() {
-    this.enqueueRender('camera')
+    this.enqueueRender('overlay')
   }
 
-  private enqueueRender(mode: 'camera' | 'full') {
-    this.pendingRender =
-      mode === 'full' || this.pendingRender === 'full' ? 'full' : 'camera'
+  private enqueueRender(mode: 'overlay' | 'camera' | 'full') {
+    // 同帧合并取最高优先级：full（全量）> camera（树层 blit + sky）> overlay（仅 sky）
+    const rank = { overlay: 1, camera: 2, full: 3 } as const
+    if (
+      this.pendingRender === 'none' ||
+      rank[mode] > rank[this.pendingRender]
+    ) {
+      this.pendingRender = mode
+    }
     if (this.frameScheduled) return
     this.frameScheduled = true
     requestAnimationFrame(() => {
@@ -166,6 +208,9 @@ export class App {
       if (m === 'full') this.render()
       else if (m === 'camera')
         this.renderer.renderFromCache(this.sceneNodes(), this.overlayList())
+      else if (m === 'overlay') {
+        if (!this.renderer.renderSky(this.overlayList())) this.render()
+      }
     })
   }
 
@@ -186,9 +231,9 @@ export class App {
 
   private emitChange(e: NodeChangeEvent) {
     for (const cb of this.changeSubs) cb(e)
-    // 覆盖层节点的变更（高亮环/虚影/选框等 markChanged）只影响叠加绘制：
-    // 走轻量路径（blit 快照 + 重画覆盖层），不重新光栅化整个场景
-    if (this.overlayNodes.has(e.node)) this.enqueueRender('camera')
+    // 覆盖层节点的变更（高亮环/虚影/选框等 markChanged）只影响天空层：
+    // 走 sky-only 路径，场景画布（树层）与快照完全不动
+    if (this.overlayNodes.has(e.node)) this.enqueueRender('overlay')
     else this.enqueueRender('full')
   }
 

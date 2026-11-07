@@ -180,15 +180,33 @@ export abstract class Node {
   abstract render(ctx: CanvasRenderingContext2D): void
   //#endregion
 
-  // 计算节点自身的变换矩阵（顺序与 Renderer 一致：平移→原点→缩放→倾斜→旋转）
+  // 计算节点自身的变换矩阵（顺序与 Renderer 一致：平移→原点→缩放→倾斜→旋转）。
+  // 矩阵由数值参数唯一确定，指纹一致即复用缓存——命中测试在节点多时每个节点
+  // 每次点击要访问矩阵多次，无缓存时每次访问都新建/求逆 DOMMatrix
+  // （1204 节点实测一次点击命中测试 ~50ms）
+  private _ltCache: DOMMatrix | null = null
+  private _ltFp = ''
+  private _ltInvCache: DOMMatrix | null = null
   get localTransform(): DOMMatrix {
+    const fp = `${this.x}|${this.y}|${this.scaleX}|${this.scaleY}|${this.skewX}|${this.skewY}|${this.rotation}|${this.originX}|${this.originY}`
+    if (this._ltCache && this._ltFp === fp) return this._ltCache
     const skew = new DOMMatrix([1, Math.tan(this.skewY), Math.tan(this.skewX), 1, 0, 0])
-    return new DOMMatrix()
+    const m = new DOMMatrix()
       .translate(this.x, this.y)
       .translate(this.originX, this.originY)
       .scale(this.scaleX, this.scaleY)
       .multiply(skew)
       .rotate(this.rotation)
+    this._ltCache = m
+    this._ltFp = fp
+    this._ltInvCache = null
+    return m
+  }
+
+  // 本地逆矩阵（hitNode/hitTest 逆变换用）：与 localTransform 同键缓存
+  get localTransformInverse(): DOMMatrix {
+    if (!this._ltInvCache) this._ltInvCache = this.localTransform.inverse()
+    return this._ltInvCache
   }
 
   // 计算从自身到世界的总变换矩阵（从根往叶子叠加，方向 local→world）
@@ -235,7 +253,7 @@ export abstract class Node {
 
   // 判断世界坐标点是否命中节点矩形（逆变换后检查是否落在 0,0,w,h 内）
   hitTest(worldX: number, worldY: number) {
-    const local = this.localTransform.inverse().transformPoint({ x: worldX, y: worldY })
+    const local = this.localTransformInverse.transformPoint({ x: worldX, y: worldY })
     return local.x >= 0 && local.x <= this.width && local.y >= 0 && local.y <= this.height
   }
 
@@ -243,7 +261,7 @@ export abstract class Node {
   // 在父坐标系内查找命中的最上层节点（子节点绘制在上层，倒序优先检测）
   hitNode(px: number, py: number): Node | null {
     // 子节点的父系 = 自身本地系，先把点逆变换成自身本地坐标再传给子节点
-    const selfLocal = this.localTransform.inverse().transformPoint({ x: px, y: py })
+    const selfLocal = this.localTransformInverse.transformPoint({ x: px, y: py })
     for (let i = this.children.length - 1; i >= 0; i--) {
       const hit = this.children[i].hitNode(selfLocal.x, selfLocal.y)
       if (hit) return hit

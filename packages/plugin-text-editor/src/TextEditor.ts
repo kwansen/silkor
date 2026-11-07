@@ -125,7 +125,8 @@ export class TextEditor implements Plugin, TextEditorCapability {
     this.el = el
     this.hidden = true
     this.syncPosition(app)
-    app.render()
+    // 不触发渲染：隐藏覆盖层模式视觉与未挂载完全一致（文字仍由 canvas 绘制），
+    // 挂载本身无任何画布变化；此前在此同步全量渲染是点击激活卡顿的根因之一
     el.focus()
     this.panIntoView(app, text)
     // 通知外部覆盖层已就绪，可自行绑定按键等事件
@@ -164,6 +165,10 @@ export class TextEditor implements Plugin, TextEditorCapability {
     const app = this.app
     if (!app) return
     const el = this.el
+    // 是否从可见态退出：可见态下 canvas 文字被隐藏（textHidden=true），需要全量渲染恢复；
+    // 隐藏态（沉底）覆盖层的卸载无任何画布变化，不需要渲染——否则每次换节点激活
+    // 都会因这里的 render 付一次全量重绘（1204 节点实测单次 ~120ms）
+    const wasVisible = el != null && !this.hidden
     // 恢复 canvas 文字绘制
     if (this.text) this.text.textHidden = false
     this.el = null
@@ -171,7 +176,7 @@ export class TextEditor implements Plugin, TextEditorCapability {
     this.hidden = true
     if (el) {
       el.remove()
-      app.render()
+      if (wasVisible) app.render()
       // 通知外部编辑已结束（如恢复键盘捕获焦点）
       this.onEditEnd?.()
     }

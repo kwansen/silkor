@@ -39,6 +39,8 @@ function createStubDocument() {
       const canvas = Object.assign(Object.create(null), {
         width: 0,
         height: 0,
+        style: {},
+        getBoundingClientRect: () => ({ width: 100, height: 100, left: 0, top: 0 }),
         getContext: () => ctx,
       });
       createdCanvases.push({ canvas: canvas as never, calls });
@@ -212,37 +214,66 @@ describe("Renderer 快照位图缓存", () => {
     expect(renderSpy).not.toHaveBeenCalled();
   });
 
-  it("覆盖层变更走轻量路径（blit + 重画覆盖层），场景变更走全量", () => {
+  it("无天空层（测试/离屏）时覆盖层变更退化为全量渲染", () => {
     const { app } = setup();
     const sceneNode = new TestNode({ x: 0, y: 0, width: 10, height: 10 });
     app.add(sceneNode);
     rafQueue.forEach((cb) => cb()); // 场景 add → 全量渲染，建立快照基准
 
     const overlay = new TestNode({ x: 0, y: 0, width: 5, height: 5 });
+    app.addOverlay(overlay);
+    rafQueue.forEach((cb) => cb()); // overlay add → sky 不可用 → 全量兜底
+
     const renderSpy = vi.spyOn(app.renderer, "render");
     const cacheSpy = vi.spyOn(app.renderer, "renderFromCache");
-
-    app.addOverlay(overlay);
-    rafQueue.forEach((cb) => cb());
-    // 覆盖层挂入（add 事件属覆盖层）：轻量路径，不重光栅化场景
-    expect(cacheSpy).toHaveBeenCalledTimes(1);
-    expect(renderSpy).not.toHaveBeenCalled();
-    // 关键回归断言：轻量路径必须传 (scene, overlays) 两个列表——
-    // 漏传覆盖层会导致高亮环/选框/虚影不绘制（曾因此丢激活样式）
-    expect(cacheSpy).toHaveBeenCalledWith(
-      [sceneNode],
-      [overlay],
-    );
+    const skySpy = vi.spyOn(app.renderer, "renderSky");
 
     overlay.markChanged();
     rafQueue.forEach((cb) => cb());
-    expect(cacheSpy).toHaveBeenCalledTimes(2);
-    expect(renderSpy).not.toHaveBeenCalled();
+    expect(skySpy).toHaveBeenCalledTimes(1);
+    expect(skySpy).toHaveReturnedWith(false); // sky 不可用
+    expect(renderSpy).toHaveBeenCalledTimes(1); // 兜底全量
+    expect(cacheSpy).not.toHaveBeenCalled();
 
     sceneNode.markChanged();
     rafQueue.forEach((cb) => cb());
-    // 场景节点变更 → 全量（重新光栅化快照）
-    expect(renderSpy).toHaveBeenCalledTimes(1);
-    expect(cacheSpy).toHaveBeenCalledTimes(2);
+    expect(renderSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("天空层就绪时覆盖层变更只重绘 sky，树层完全不动", () => {
+    // 带父容器的画布：App 构造时自动创建天空层画布
+    const { ctx } = createRecordingCtx();
+    const canvas = {
+      style: {},
+      offsetLeft: 0,
+      offsetTop: 0,
+      getContext: () => ctx,
+      getBoundingClientRect: () => ({ width: 100, height: 100, left: 0, top: 0 }),
+      parentElement: { appendChild: () => {}, style: {} },
+      width: 0,
+      height: 0,
+    } as unknown as HTMLCanvasElement;
+    const app = new App(canvas);
+    app.renderer.resize(); // 测试环境无 RO 回调，手动激活天空层 ctx
+    expect(app.renderer.sky).toBeTruthy();
+    app.render(); // 建立快照基准
+
+    const overlay = new TestNode({ x: 0, y: 0, width: 5, height: 5 });
+    const renderSpy = vi.spyOn(app.renderer, "render");
+    const cacheSpy = vi.spyOn(app.renderer, "renderFromCache");
+    const skySpy = vi.spyOn(app.renderer, "renderSky");
+
+    app.addOverlay(overlay);
+    rafQueue.forEach((cb) => cb());
+    // 覆盖层变更 → sky-only：树层（全量/blit）零参与
+    expect(skySpy).toHaveBeenCalledTimes(1);
+    expect(skySpy).toHaveReturnedWith(true);
+    expect(renderSpy).not.toHaveBeenCalled();
+    expect(cacheSpy).not.toHaveBeenCalled();
+
+    overlay.markChanged();
+    rafQueue.forEach((cb) => cb());
+    expect(skySpy).toHaveBeenCalledTimes(2);
+    expect(renderSpy).not.toHaveBeenCalled();
   });
 });

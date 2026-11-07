@@ -18,6 +18,12 @@ export class Renderer {
   width = 0
   height = 0
 
+  // 天空层画布（可选，App 创建注入）：覆盖层绘制在独立透明画布上，覆盖层-only
+  // 路径（renderSky）只重绘该层，场景画布（树层）与快照完全不动；为 null 时
+  // 覆盖层退化为画在主画布上
+  sky: HTMLCanvasElement | null = null
+  private skyCtx: CanvasRenderingContext2D | null = null
+
   // false 时 render() 走原直绘路径（exporter 离屏渲染等需要精确画布数量的场景用）
   snapshotEnabled = true
   // overscan 余量（CSS px）：快照比视口四周大该余量，平移不超过余量即无空边
@@ -46,6 +52,16 @@ export class Renderer {
     this.width = this.canvas.width = Math.round(rect.width * dpr)
     this.height = this.canvas.height = Math.round(rect.height * dpr)
     this.ctx!.setTransform(dpr, 0, 0, dpr, 0, 0)
+    // 天空层同步：物理尺寸与 dpr 基准变换跟随主画布
+    if (this.sky) {
+      const srect = this.sky.getBoundingClientRect()
+      this.sky.width = Math.round(srect.width * dpr)
+      this.sky.height = Math.round(srect.height * dpr)
+      this.skyCtx = this.sky.getContext('2d')
+      this.skyCtx?.setTransform(dpr, 0, 0, dpr, 0, 0)
+    } else {
+      this.skyCtx = null
+    }
   }
 
   // 全量渲染：场景光栅化进离屏快照（含 overscan，不含覆盖层）并记录基准，
@@ -161,15 +177,31 @@ export class Renderer {
     this.ctx.restore()
   }
 
-  // 覆盖层叠加：在 blit/呈现之后的相机变换下直接绘制（覆盖层数量少、逐帧重画廉价）
+  // 覆盖层-only 路径：只重绘天空层（场景画布与快照完全不动）。
+  // 返回是否成功；天空层不可用（测试/离屏）时返回 false，调用方退化为全量渲染
+  renderSky(overlays: Node[]): boolean {
+    if (!this.skyCtx) return false
+    this.drawOverlays(overlays)
+    return true
+  }
+
+  // 覆盖层叠加：优先画在天空层（先清屏），无天空层时画在主画布
+  // （主画布此时已被呈现步骤清屏，无需再清）
   private drawOverlays(overlays: Node[]) {
-    if (!overlays.length || !this.ctx) return
-    const ctx = this.ctx
-    ctx.save()
-    ctx.translate(this.camera.x, this.camera.y)
-    ctx.scale(this.camera.scale, this.camera.scale)
-    this.renderNodes(ctx, overlays)
-    ctx.restore()
+    const sky = this.skyCtx
+    if (sky) {
+      sky.save()
+      sky.setTransform(1, 0, 0, 1, 0, 0)
+      sky.clearRect(0, 0, this.sky!.width, this.sky!.height)
+      sky.restore()
+    }
+    const target = sky ?? this.ctx
+    if (!target || !overlays.length) return
+    target.save()
+    target.translate(this.camera.x, this.camera.y)
+    target.scale(this.camera.scale, this.camera.scale)
+    this.renderNodes(target, overlays)
+    target.restore()
   }
 
   //#region 快照位图缓存

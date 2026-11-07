@@ -1,4 +1,4 @@
-import { CANVAS_CLICK_CAPABILITY } from '@silker/core'
+﻿import { CANVAS_CLICK_CAPABILITY } from '@silker/core'
 import type { App, Plugin } from '@silker/core'
 import type { CanvasClickCapability } from '@silker/core'
 

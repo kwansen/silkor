@@ -150,3 +150,43 @@ describe("App.reorder", () => {
     expect([...app.children]).toEqual([b]);
   });
 });
+
+describe("App.addOverlay", () => {
+  it("覆盖层加入场景并置于最上层，重复注册幂等", () => {
+    const app = new App(createStubCanvas());
+    const a = new TestNode();
+    const overlay = new TestNode();
+    app.add(a);
+    app.addOverlay(overlay);
+    app.addOverlay(overlay); // 幂等：重复注册无副作用
+
+    expect([...app.children]).toEqual([a, overlay]);
+  });
+
+  it("后续 add/insert/reorder 自动保持覆盖层置顶（不变量由 App 收口）", () => {
+    const app = new App(createStubCanvas());
+    const overlay = new TestNode();
+    const a = new TestNode();
+    const b = new TestNode();
+    app.addOverlay(overlay);
+    app.add(a); // 追加到末尾（旧覆盖层之下）
+    app.insert(b, 0);
+    // 把非覆盖层节点移到末尾：reorder 后覆盖层仍被拉回最上层
+    app.reorder(a, app.children.length);
+
+    expect([...app.children]).toEqual([b, a, overlay]);
+  });
+
+  it("remove 覆盖层即注销：后续结构变更不再维持置顶", () => {
+    const app = new App(createStubCanvas());
+    const overlay = new TestNode();
+    const a = new TestNode();
+    app.addOverlay(overlay);
+    app.remove(overlay);
+    app.add(a);
+
+    expect([...app.children]).toEqual([a]);
+    app.addOverlay(overlay); // 重新注册恢复置顶身份
+    expect([...app.children]).toEqual([a, overlay]);
+  });
+});

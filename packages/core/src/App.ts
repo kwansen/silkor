@@ -36,12 +36,15 @@ export class App {
       this.roots.push(node)
       node.parent = null
       this.watchRoot(node)
+      // 覆盖层自动置顶先于事件：观察者看到的即最终绘制顺序
+      this.raiseOverlays()
       // 结构变更：app.add 同样产生 add 事件（幂等 use/uninstall 同理，重复 add 由调用方负责）
       this.emitChange({ node, type: 'add' })
     })
   }
 
-  // 移除根级节点：摘出数组、解除根监听并产生 remove 事件；不在场景中则无操作
+  // 移除根级节点：摘出数组、解除根监听并产生 remove 事件；不在场景中则无操作。
+  // 移除覆盖层节点即注销其常驻置顶身份
   remove(nodes: Node | Node[]) {
     const list = Array.isArray(nodes) ? nodes : [nodes]
     list.forEach(node => {
@@ -49,6 +52,7 @@ export class App {
       if (i === -1) return
       this.roots.splice(i, 1)
       node.parent = null
+      this.overlayNodes.delete(node)
       // 解除根监听（再挂入时由 watchRoot 重新建立）
       this.rootUnsubs.get(node)?.()
       this.rootUnsubs.delete(node)
@@ -57,26 +61,55 @@ export class App {
   }
 
   // 按 z 序索引插入根级节点：undo/redo 按索引重放与分层插入（如连线层在形状层之下）共用。
-  // 与 add 一致：建立根监听并产生 add 事件；索引越界自动钳制到 [0, length]
+  // 与 add 一致：建立根监听、覆盖层自动置顶并产生 add 事件；索引越界自动钳制到 [0, length]
   insert(node: Node, index: number) {
     this.roots.splice(Math.max(0, Math.min(index, this.roots.length)), 0, node)
     node.parent = null
     this.watchRoot(node)
+    this.raiseOverlays()
     this.emitChange({ node, type: 'add' })
   }
 
   // z 序调整：把已在场景中的节点移动到目标索引（不产生结构事件），
-  // 覆盖层置顶、连线层内排序等纯绘制顺序变化走此方法；index 为移除前数组中的目标位置
+  // 覆盖层置顶、连线层内排序等纯绘制顺序变化走此方法；index 为移除前数组中的目标位置。
+  // 移动非覆盖层节点可能把它顶到覆盖层之上，末尾统一把覆盖层拉回最上层
   reorder(node: Node, index: number) {
     const i = this.roots.indexOf(node)
     if (i === -1) return
     this.roots.splice(i, 1)
     this.roots.splice(Math.max(0, Math.min(index, this.roots.length)), 0, node)
+    if (!this.overlayNodes.has(node)) this.raiseOverlays()
   }
 
   render() {
     this.renderer.render(this.roots)
   }
+
+  //#region 常驻顶层覆盖层
+  // 覆盖层节点（选中框/高亮环/拖拽反馈等交互辅助）注册表：「辅助节点画在最上层」的
+  // 不变量由 App 收口——任何根级结构变更（add/insert/reorder）都自动把覆盖层保持在
+  // children 末尾，场景不再各自手动 raise。remove 覆盖层节点即注销
+  private overlayNodes = new Set<Node>()
+
+  // 注册常驻顶层覆盖层：加入场景（幂等）并置于最上层
+  addOverlay(node: Node) {
+    if (this.overlayNodes.has(node)) return
+    this.overlayNodes.add(node)
+    this.add(node)
+    this.raiseOverlays()
+  }
+
+  // 把全部覆盖层移到绘制末尾（纯顺序变化，不产生结构事件；渲染由触发方的事件/rAF 负责）
+  private raiseOverlays() {
+    if (this.overlayNodes.size === 0) return
+    for (const n of this.overlayNodes) {
+      const i = this.roots.indexOf(n)
+      if (i === -1) continue
+      this.roots.splice(i, 1)
+      this.roots.push(n)
+    }
+  }
+  //#endregion
 
   // rAF 合帧渲染：一帧内多次请求合并为一次绘制。平移/缩放/输入等高频事件只请求
   // 不直接绘制，把「每事件一绘」的全量重绘降为「每帧最多一绘」

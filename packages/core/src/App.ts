@@ -11,27 +11,18 @@ export class App {
   renderer: Renderer
   // 相机：视口状态唯一属主（平移/缩放/坐标换算/变化通知），渲染器只消费
   camera: Camera
-  // 拖拽判定阈值（屏幕像素）：位移超过该值视为拖拽而非点击。
-  // 画布点击分发的机制层常量；场景内同类阈值（如框选成框）各自声明
-  static readonly DRAG_THRESHOLD = 3
-  // 空白点击回调：点击画布未命中任何节点时触发（供外部取消激活态等）
-  onBlankClick: ((e: MouseEvent) => void) | null = null
-  // 鼠标按下位置：用于区分点击与拖拽平移（click 在拖拽后仍会触发）
-  private downPoint: { x: number; y: number } | null = null
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
     this.camera = new Camera(canvas)
     this.renderer = new Renderer(canvas, this.camera)
-    canvas.addEventListener('mousedown', (e) => {
-      this.downPoint = { x: e.clientX, y: e.clientY }
-    })
-    canvas.addEventListener('click', (e) => this.onCanvasClick(e))
     // 容器尺寸变化：同步画布物理尺寸并重绘（ResizeObserver 首次观察也触发一次，等价重绘无副作用）
     new ResizeObserver(() => {
       this.renderer.resize()
       this.render()
     }).observe(canvas)
+    // 画布点击分发（拖拽阈值判定/命中测试/空白点击）由 plugin-interaction 的
+    // Clicker 插件承担：core 只保留渲染与能力机制
   }
 
   add(nodes: Node | Node[]) {
@@ -56,22 +47,6 @@ export class App {
       this.renderScheduled = false
       this.render()
     })
-  }
-
-  // 处理画布点击：屏幕坐标经相机逆变换为世界坐标，再找命中节点触发 onClick
-  private onCanvasClick(e: MouseEvent) {
-    const { x, y } = this.camera.toWorld(e.clientX, e.clientY)
-    // 拖拽（位移超过阈值）不视为点击：既不激活节点也不触发空白点击（如框选结束落在节点上）
-    if (this.downPoint
-      && Math.hypot(e.clientX - this.downPoint.x, e.clientY - this.downPoint.y) > App.DRAG_THRESHOLD) return
-    for (let i = this.children.length - 1; i >= 0; i--) {
-      const hit = this.children[i].hitNode(x, y)
-      if (hit) {
-        hit.onClick?.(this)
-        return
-      }
-    }
-    this.onBlankClick?.(e)
   }
 
   use(plugin: Plugin) {

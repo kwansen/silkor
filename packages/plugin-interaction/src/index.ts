@@ -6,3 +6,8 @@ export {
   type PointerCapability,
   type PointerHandlers,
 } from './Pointer'
+export {
+  Clicker,
+  CANVAS_CLICK_CAPABILITY,
+  type CanvasClickCapability,
+} from './Clicker'

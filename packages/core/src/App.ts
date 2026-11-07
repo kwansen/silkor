@@ -7,7 +7,12 @@ import type { CapabilityKey, CapabilityMeta } from "./Capability"
 
 export class App {
   canvas: HTMLCanvasElement
-  children: Node[] = []
+  // 根级节点的唯一可变存储：外部一律经 add/remove/insert/reorder 操作，
+  // 只读视图 children 供消费方遍历/查询（直接 push/splice 会绕过变更事件与根监听）
+  private roots: Node[] = []
+  get children(): readonly Node[] {
+    return this.roots
+  }
   renderer: Renderer
   // 相机：视口状态唯一属主（平移/缩放/坐标换算/变化通知），渲染器只消费
   camera: Camera
@@ -28,7 +33,7 @@ export class App {
   add(nodes: Node | Node[]) {
     const list = Array.isArray(nodes) ? nodes : [nodes]
     list.forEach(node => {
-      this.children.push(node)
+      this.roots.push(node)
       node.parent = null
       this.watchRoot(node)
       // 结构变更：app.add 同样产生 add 事件（幂等 use/uninstall 同理，重复 add 由调用方负责）
@@ -36,8 +41,41 @@ export class App {
     })
   }
 
+  // 移除根级节点：摘出数组、解除根监听并产生 remove 事件；不在场景中则无操作
+  remove(nodes: Node | Node[]) {
+    const list = Array.isArray(nodes) ? nodes : [nodes]
+    list.forEach(node => {
+      const i = this.roots.indexOf(node)
+      if (i === -1) return
+      this.roots.splice(i, 1)
+      node.parent = null
+      // 解除根监听（再挂入时由 watchRoot 重新建立）
+      this.rootUnsubs.get(node)?.()
+      this.rootUnsubs.delete(node)
+      this.emitChange({ node, type: 'remove' })
+    })
+  }
+
+  // 按 z 序索引插入根级节点：undo/redo 按索引重放与分层插入（如连线层在形状层之下）共用。
+  // 与 add 一致：建立根监听并产生 add 事件；索引越界自动钳制到 [0, length]
+  insert(node: Node, index: number) {
+    this.roots.splice(Math.max(0, Math.min(index, this.roots.length)), 0, node)
+    node.parent = null
+    this.watchRoot(node)
+    this.emitChange({ node, type: 'add' })
+  }
+
+  // z 序调整：把已在场景中的节点移动到目标索引（不产生结构事件），
+  // 覆盖层置顶、连线层内排序等纯绘制顺序变化走此方法；index 为移除前数组中的目标位置
+  reorder(node: Node, index: number) {
+    const i = this.roots.indexOf(node)
+    if (i === -1) return
+    this.roots.splice(i, 1)
+    this.roots.splice(Math.max(0, Math.min(index, this.roots.length)), 0, node)
+  }
+
   render() {
-    this.renderer.render(this.children)
+    this.renderer.render(this.roots)
   }
 
   // rAF 合帧渲染：一帧内多次请求合并为一次绘制。平移/缩放/输入等高频事件只请求

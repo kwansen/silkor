@@ -61,10 +61,7 @@ export class Selection<T> implements Plugin, SelectionCapability<T> {
   dispose() {
     window.removeEventListener("mousemove", this.onMove);
     window.removeEventListener("mouseup", this.onUp);
-    if (this.app && this.band) {
-      const i = this.app.children.indexOf(this.band);
-      if (i !== -1) this.app.children.splice(i, 1);
-    }
+    if (this.app && this.band) this.app.remove(this.band);
     this.band = null;
     this.app = null;
     this.down = null;
@@ -112,8 +109,7 @@ export class Selection<T> implements Plugin, SelectionCapability<T> {
   beginMarquee(e: MouseEvent) {
     if (!this.app || !this.band) return;
     // 上个会话若因异常未收尾（正常流程松手即移除），先清理选框节点
-    const i = this.app.children.indexOf(this.band);
-    if (i !== -1) this.app.children.splice(i, 1);
+    this.app.remove(this.band);
     this.band.start = null;
     this.band.end = null;
     const w = this.app!.camera.toWorld(e.clientX, e.clientY);
@@ -158,8 +154,7 @@ export class Selection<T> implements Plugin, SelectionCapability<T> {
     const rect = this.rect;
     this.rect = null;
     // 移除选框节点并清空起止点（下次成框重新挂入，保持在场景顶层）
-    const i = this.app.children.indexOf(this.band);
-    if (i !== -1) this.app.children.splice(i, 1);
+    this.app.remove(this.band);
     this.band.start = null;
     this.band.end = null;
     const hits = armed && rect ? this.hitRect(rect) : [];

@@ -89,8 +89,19 @@ export class App {
     if (!this.overlayNodes.has(node)) this.raiseOverlays()
   }
 
+  // 全量渲染：场景节点光栅化进快照，覆盖层（高亮环/选框/虚影等）在呈现时直接叠加
   render() {
-    this.renderer.render(this.roots)
+    this.renderer.render(this.sceneNodes(), this.overlayList())
+  }
+
+  // 场景节点 = 根级节点中未被注册为覆盖层的部分（保持绘制次序）
+  private sceneNodes(): Node[] {
+    return this.roots.filter(n => !this.overlayNodes.has(n))
+  }
+
+  // 覆盖层节点列表（roots 已由 raiseOverlays 保证覆盖层在末尾，次序即绘制次序）
+  private overlayList(): Node[] {
+    return this.roots.filter(n => this.overlayNodes.has(n))
   }
 
   //#region 常驻顶层覆盖层
@@ -136,6 +147,13 @@ export class App {
     this.enqueueRender('camera')
   }
 
+  // 覆盖层-only 渲染请求：高亮环/选框/拖拽虚影等交互覆盖层的视觉变化调用——
+  // 场景位图未变，只需 blit 快照 + 重画覆盖层（与相机快速路径同一条执行链，
+  // 区别仅在语义：一个源于相机移动，一个源于覆盖层状态变化）
+  requestOverlayRender() {
+    this.enqueueRender('camera')
+  }
+
   private enqueueRender(mode: 'camera' | 'full') {
     this.pendingRender =
       mode === 'full' || this.pendingRender === 'full' ? 'full' : 'camera'
@@ -146,7 +164,8 @@ export class App {
       const m = this.pendingRender
       this.pendingRender = 'none'
       if (m === 'full') this.render()
-      else if (m === 'camera') this.renderer.renderFromCache(this.roots)
+      else if (m === 'camera')
+        this.renderer.renderFromCache(this.sceneNodes(), this.overlayList())
     })
   }
 
@@ -167,8 +186,10 @@ export class App {
 
   private emitChange(e: NodeChangeEvent) {
     for (const cb of this.changeSubs) cb(e)
-    // 变更后统一走 rAF 合帧渲染
-    this.requestRender()
+    // 覆盖层节点的变更（高亮环/虚影/选框等 markChanged）只影响叠加绘制：
+    // 走轻量路径（blit 快照 + 重画覆盖层），不重新光栅化整个场景
+    if (this.overlayNodes.has(e.node)) this.enqueueRender('camera')
+    else this.enqueueRender('full')
   }
 
   private watchRoot(node: Node) {

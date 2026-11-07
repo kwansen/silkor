@@ -8,6 +8,10 @@ import type { Camera } from "./Camera"
 // 余量的离屏快照（offscreen-primary），主画布用一次整数偏移的 1:1 drawImage 呈现
 // 中心区域；相机-only 变更（平移/缩放，场景未变）走 renderFromCache 快速路径——
 // 主画布只做一次差量 drawImage，不遍历节点树。快照失效逻辑 = 全量渲染即刷新。
+//
+// 场景/覆盖层分离：快照只含场景节点；交互覆盖层（高亮环/拖拽虚影/选框等）在每次
+// 呈现时直接画在主画布上。覆盖层自身的微小视觉变化（如激活高亮环）因此只需
+// "blit 快照 + 重画几个覆盖层"，无需重新光栅化整个场景
 export class Renderer {
   ctx: CanvasRenderingContext2D | null = null
   canvas: HTMLCanvasElement
@@ -44,15 +48,15 @@ export class Renderer {
     this.ctx!.setTransform(dpr, 0, 0, dpr, 0, 0)
   }
 
-  // 全量渲染：场景光栅化进离屏快照（含 overscan）并记录基准，再从快照呈现到主画布；
-  // 快照不可用（无 document / 创建失败）时降级直绘
-  render(nodes: Node[]) {
+  // 全量渲染：场景光栅化进离屏快照（含 overscan，不含覆盖层）并记录基准，
+  // 再从快照呈现到主画布并叠加覆盖层；快照不可用（无 document / 创建失败）时降级直绘
+  render(scene: Node[], overlays: Node[] = []) {
     if (!this.snapshotEnabled) {
-      this.renderDirect(nodes)
+      this.renderDirect(scene, overlays)
       return
     }
     if (!this.ensureSnapshot()) {
-      this.renderDirect(nodes)
+      this.renderDirect(scene, overlays)
       return
     }
     const dpr = window.devicePixelRatio || 1
@@ -63,11 +67,11 @@ export class Renderer {
     sctx.setTransform(1, 0, 0, 1, 0, 0)
     sctx.clearRect(0, 0, this.snapshot!.width, this.snapshot!.height)
     sctx.restore()
-    // 场景光栅化进快照：纯设备空间变换，中心视口区域对齐 md 偏移
+    // 场景光栅化进快照（不含覆盖层）：纯设备空间变换，中心视口区域对齐 md 偏移
     sctx.save()
     sctx.translate(md + dpr * this.camera.x, md + dpr * this.camera.y)
     sctx.scale(dpr * this.camera.scale, dpr * this.camera.scale)
-    this.renderNodes(sctx, nodes)
+    this.renderNodes(sctx, scene)
     sctx.restore()
     // 记录快照基准（cacheCamera）：后续相机-only 帧按此差量 blit
     this.cache = {
@@ -82,11 +86,12 @@ export class Renderer {
       mainH: this.canvas.height,
     }
     this.presentFromCache()
+    this.drawOverlays(overlays)
   }
 
-  // 相机-only 快速路径：场景未变、只改了相机，从快照差量 blit 呈现；
-  // 任一有效性判定不满足时自动转全量渲染（rebase），调用方无需关心结果
-  renderFromCache(nodes: Node[]) {
+  // 相机-only / 覆盖层-only 快速路径：场景位图未变，从快照差量 blit 呈现并重画
+  // 覆盖层；任一有效性判定不满足时自动转全量渲染（rebase），调用方无需关心结果
+  renderFromCache(scene: Node[], overlays: Node[] = []) {
     if (
       !this.snapshotEnabled ||
       !this.snapshot ||
@@ -95,7 +100,7 @@ export class Renderer {
       this.cache.mainW !== this.canvas.width ||
       this.cache.mainH !== this.canvas.height
     ) {
-      this.render(nodes)
+      this.render(scene, overlays)
       return
     }
     const dpr = window.devicePixelRatio || 1
@@ -109,7 +114,7 @@ export class Renderer {
       !Number.isFinite(x1) || !Number.isFinite(y1) || !Number.isFinite(s1) ||
       s0 <= 0 || s1 <= 0 || dpr <= 0 || dprSnap <= 0
     ) {
-      this.render(nodes)
+      this.render(scene, overlays)
       return
     }
     // 快照位图 → 主画布的仿射映射（推导见计划文档）：世界点 w 在快照位图上的
@@ -123,19 +128,20 @@ export class Renderer {
       tx + a * bmpW < this.canvas.width ||
       ty + a * bmpH < this.canvas.height
     ) {
-      this.render(nodes)
+      this.render(scene, overlays)
       return
     }
     // 质量门：放大倍率超限即 rebase（防累积模糊）
     if (a > this.maxSnapshotUpscale) {
-      this.render(nodes)
+      this.render(scene, overlays)
       return
     }
     this.presentFromCache(a, Math.round(tx), Math.round(ty))
+    this.drawOverlays(overlays)
   }
 
-  // 原直绘路径：清屏 + 相机变换 + 递归绘制整棵节点树（快照降级/exporter 直绘用）
-  private renderDirect(nodes: Node[]) {
+  // 原直绘路径：清屏 + 相机变换 + 递归绘制节点树 + 覆盖层（快照降级/exporter 直绘用）
+  private renderDirect(scene: Node[], overlays: Node[]) {
     if (!this.ctx) {
       throw Error('ctx未创建成功')
     }
@@ -150,8 +156,20 @@ export class Renderer {
     // 应用相机平移与缩放
     this.ctx.translate(this.camera.x, this.camera.y)
     this.ctx.scale(this.camera.scale, this.camera.scale)
-    this.renderNodes(this.ctx, nodes)
+    this.renderNodes(this.ctx, scene)
+    this.renderNodes(this.ctx, overlays)
     this.ctx.restore()
+  }
+
+  // 覆盖层叠加：在 blit/呈现之后的相机变换下直接绘制（覆盖层数量少、逐帧重画廉价）
+  private drawOverlays(overlays: Node[]) {
+    if (!overlays.length || !this.ctx) return
+    const ctx = this.ctx
+    ctx.save()
+    ctx.translate(this.camera.x, this.camera.y)
+    ctx.scale(this.camera.scale, this.camera.scale)
+    this.renderNodes(ctx, overlays)
+    ctx.restore()
   }
 
   //#region 快照位图缓存

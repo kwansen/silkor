@@ -134,14 +134,16 @@ export class Selection<T> implements Plugin, SelectionCapability<T> {
         return;
       this.armed = true;
       this.band.start = { x: down.wx, y: down.wy };
-      this.app.add(this.band);
+      // 选框是交互覆盖层：注册常驻置顶身份（渲染管线据此把它排除在场景快照之外，
+      // marquee 移动只走轻量路径，不重光栅化场景）
+      this.app.addOverlay(this.band);
       this.onMarqueeStart?.();
     }
     this.band.end = this.app!.camera.toWorld(e.clientX, e.clientY);
     const rect = this.marqueeRect();
     this.rect = rect;
     const hits = this.hitRect(rect);
-    this.app.requestRender();
+    this.app.requestOverlayRender();
     this.onMarqueeMove?.(rect, hits);
   };
 
@@ -158,7 +160,7 @@ export class Selection<T> implements Plugin, SelectionCapability<T> {
     this.band.start = null;
     this.band.end = null;
     const hits = armed && rect ? this.hitRect(rect) : [];
-    this.app.requestRender();
+    this.app.requestOverlayRender();
     this.onMarqueeEnd?.(armed ? rect : null, hits);
   };
 

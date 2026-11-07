@@ -60,10 +60,7 @@ export class App {
 
   // 处理画布点击：屏幕坐标经视口逆变换为世界坐标，再找命中节点触发 onClick
   private onCanvasClick(e: MouseEvent) {
-    const rect = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect()
-    const { x: vx, y: vy, scale } = this.renderer.viewport
-    const x = (e.clientX - rect.left - vx) / scale
-    const y = (e.clientY - rect.top - vy) / scale
+    const { x, y } = this.renderer.toWorld(e.clientX, e.clientY)
     // 拖拽（位移超过阈值）不视为点击：既不激活节点也不触发空白点击（如框选结束落在节点上）
     if (this.downPoint
       && Math.hypot(e.clientX - this.downPoint.x, e.clientY - this.downPoint.y) > 3) return

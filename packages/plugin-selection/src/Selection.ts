@@ -115,7 +115,7 @@ export class Selection<T> implements Plugin, SelectionCapability<T> {
     if (i !== -1) this.app.children.splice(i, 1);
     this.band.start = null;
     this.band.end = null;
-    const w = this.toWorld(e);
+    const w = this.app!.renderer.toWorld(e.clientX, e.clientY);
     this.down = {
       sx: e.clientX,
       sy: e.clientY,
@@ -140,7 +140,7 @@ export class Selection<T> implements Plugin, SelectionCapability<T> {
       this.app.add(this.band);
       this.onMarqueeStart?.();
     }
-    this.band.end = this.toWorld(e);
+    this.band.end = this.app!.renderer.toWorld(e.clientX, e.clientY);
     const rect = this.marqueeRect();
     this.rect = rect;
     const hits = this.hitRect(rect);
@@ -176,16 +176,6 @@ export class Selection<T> implements Plugin, SelectionCapability<T> {
       y,
       width: Math.abs(band.end!.x - band.start!.x),
       height: Math.abs(band.end!.y - band.start!.y),
-    };
-  }
-
-  // 屏幕坐标 → 世界坐标（视口逆变换）
-  private toWorld(e: MouseEvent) {
-    const rect = this.app!.canvas.getBoundingClientRect();
-    const { x: vx, y: vy, scale } = this.app!.renderer.viewport;
-    return {
-      x: (e.clientX - rect.left - vx) / scale,
-      y: (e.clientY - rect.top - vy) / scale,
     };
   }
   //#endregion

@@ -47,6 +47,27 @@ export class Renderer {
     this.listeners.forEach(fn => fn())
   }
 
+  // 屏幕坐标 → 世界坐标（视口逆变换）：clientX/Y 为浏览器事件坐标，
+  // 内部扣除画布在页面中的偏移后应用视口逆变换（唯一实现，供 App/插件/场景共用）
+  toWorld(clientX: number, clientY: number) {
+    const rect = this.canvas.getBoundingClientRect()
+    const { x: vx, y: vy, scale } = this.viewport
+    return {
+      x: (clientX - rect.left - vx) / scale,
+      y: (clientY - rect.top - vy) / scale,
+    }
+  }
+
+  // 世界坐标 → 屏幕坐标（视口正变换）：toWorld 的逆运算
+  toScreen(x: number, y: number) {
+    const rect = this.canvas.getBoundingClientRect()
+    const { x: vx, y: vy, scale } = this.viewport
+    return {
+      x: x * scale + vx + rect.left,
+      y: y * scale + vy + rect.top,
+    }
+  }
+
   render(nodes: Node[]) {
     if (!this.ctx) {
       throw Error('ctx未创建成功')

@@ -1,11 +1,12 @@
-import { Text } from '@silker/core'
+﻿import { Text } from '@silker/core'
 import type { App, Node, Plugin } from '@silker/core'
 import { TEXT_EDITOR_CAPABILITY } from './capability'
 import type { TextEditorCapability } from './capability'
 import { TextEditorView } from './TextEditorView'
 import { TextEditorPosition } from './TextEditorPosition'
 
-// 文本编辑插件选项
+// 编辑会话回调：公开可写字段（构造选项注入初始值，运行期可被宿主重新赋值）——
+// 场景包以能力键取到本插件实例后即可绑定自身业务回调，无需在构造期持有场景引用
 export interface TextEditorOptions {
   // 输入回调（文本已更新），可用于触发重新布局
   onInput?: (text: Text) => void
@@ -33,7 +34,18 @@ export class TextEditor implements Plugin, TextEditorCapability {
   private originalAdd: ((nodes: Node | Node[]) => void) | null = null
   private disposed = false
 
-  constructor(private options: TextEditorOptions = {}) {}
+  // 编辑会话回调（公开可写）：消费方可在 install 后按需赋值
+  onInput: ((text: Text) => void) | undefined
+  onEditStart: ((el: HTMLDivElement, text: Text) => void) | undefined
+  onEditEnd: (() => void) | undefined
+  onActivate: ((text: Text) => void) | undefined
+
+  constructor(options: TextEditorOptions = {}) {
+    this.onInput = options.onInput
+    this.onEditStart = options.onEditStart
+    this.onEditEnd = options.onEditEnd
+    this.onActivate = options.onActivate
+  }
 
   // ───────────────────────── 生命周期 ─────────────────────────
 
@@ -47,7 +59,7 @@ export class TextEditor implements Plugin, TextEditorCapability {
       provider: '@silker/plugin-text-editor',
     })
     // 视口变化时重新对齐编辑框，跟随平移缩放；记录解除订阅句柄供 dispose 撤销
-    this.offViewportChange = app.renderer.onViewportChange(() =>
+    this.offViewportChange = app.camera.onViewportChange(() =>
       this.syncPosition(app),
     )
     app.children.forEach(child => this.bindText(child))
@@ -117,7 +129,7 @@ export class TextEditor implements Plugin, TextEditorCapability {
     el.focus()
     this.panIntoView(app, text)
     // 通知外部覆盖层已就绪，可自行绑定按键等事件
-    this.options.onEditStart?.(el, text)
+    this.onEditStart?.(el, text)
   }
 
   // 显示覆盖层接管文字渲染（隐藏态 → 显示态）。fill 为 true（点击进入）时把节点文本填入
@@ -161,7 +173,7 @@ export class TextEditor implements Plugin, TextEditorCapability {
       el.remove()
       app.render()
       // 通知外部编辑已结束（如恢复键盘捕获焦点）
-      this.options.onEditEnd?.()
+      this.onEditEnd?.()
     }
   }
 
@@ -180,7 +192,7 @@ export class TextEditor implements Plugin, TextEditorCapability {
   // 递归为节点树中的文本节点绑定点击事件（仅通知激活，不直接挂载覆盖层）
   private bindText(node: Node) {
     if (node instanceof Text) {
-      node.onClick = () => this.options.onActivate?.(node)
+      node.onClick = () => this.onActivate?.(node)
     }
     node.children.forEach(child => this.bindText(child))
   }
@@ -204,13 +216,13 @@ export class TextEditor implements Plugin, TextEditorCapability {
       this.panIntoView(app, text)
       this.syncPosition(app)
       // 通知外部输入事件，触发重新布局等联动
-      this.options.onInput?.(text)
+      this.onInput?.(text)
     })
     el.addEventListener('blur', () => {
       // 覆盖层可能已在节点切换中被移除，仅对仍在文档中的元素切回隐藏态（文字交还 canvas）
       if (el.isConnected) {
         this.toHidden(false)
-        this.options.onEditEnd?.()
+        this.onEditEnd?.()
       }
     })
   }
@@ -327,7 +339,7 @@ export class TextEditor implements Plugin, TextEditorCapability {
     const text = this.text
     const el = this.el
     if (!text || !el) return
-    const vp = app.renderer.viewport
+    const vp = app.camera.viewport
     const pos = this.position!.get(text, vp)
     el.style.left = `${pos.x}px`
     el.style.top = `${pos.y}px`
@@ -340,7 +352,7 @@ export class TextEditor implements Plugin, TextEditorCapability {
   private panIntoView(app: App, text: Text) {
     const el = this.el
     if (!el) return
-    const vp = app.renderer.viewport
+    const vp = app.camera.viewport
     const point = text.getWorldPoint()
     // 世界坐标换算成屏幕坐标
     const sx = point.x * vp.scale + vp.x
@@ -357,7 +369,7 @@ export class TextEditor implements Plugin, TextEditorCapability {
     const dy = bottom > window.innerHeight - 20 ? window.innerHeight - 20 - bottom : 0
     if (dx === 0 && dy === 0) return
     // 平移视口而非节点坐标，保持布局数据不变并触发编辑框对齐
-    app.renderer.setViewport({ ...vp, x: vp.x + dx, y: vp.y + dy })
+    app.camera.setViewport({ ...vp, x: vp.x + dx, y: vp.y + dy })
     app.render()
   }
 }

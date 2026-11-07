@@ -8,7 +8,8 @@ import type {
 import { selectionCapabilityKey } from "./capability";
 import { MarqueeBand } from "./MarqueeBand";
 
-// 框选命中测试：返回与选框相交的条目（拖框中每帧、松手时调用）
+// 框选命中测试：返回与选框相交的条目（拖框中每帧、松手时调用）。
+// 公开可写：场景包以能力键取到本插件实例后即可赋值，无需在构造期持有场景引用
 export interface SelectionOptions<T> {
   hitRect?: (rect: Bounds) => T[];
 }
@@ -34,7 +35,8 @@ export class Selection<T> implements Plugin, SelectionCapability<T> {
   private armed = false;
   private rect: Bounds | null = null;
   private band: MarqueeBand | null = null;
-  private hitRect: (rect: Bounds) => T[];
+  // 命中规则（公开可写）：消费方 install 后按需赋值
+  hitRect: (rect: Bounds) => T[];
 
   onChange: ((change: SelectionChange<T>) => void) | null = null;
   onMarqueeStart: (() => void) | null = null;
@@ -47,7 +49,7 @@ export class Selection<T> implements Plugin, SelectionCapability<T> {
 
   install(app: App) {
     this.app = app;
-    this.band = new MarqueeBand(() => app.renderer.viewport.scale);
+    this.band = new MarqueeBand(() => app.camera.scale);
     window.addEventListener("mousemove", this.onMove);
     window.addEventListener("mouseup", this.onUp);
     app.provide(
@@ -115,7 +117,7 @@ export class Selection<T> implements Plugin, SelectionCapability<T> {
     if (i !== -1) this.app.children.splice(i, 1);
     this.band.start = null;
     this.band.end = null;
-    const w = this.app!.renderer.toWorld(e.clientX, e.clientY);
+    const w = this.app!.camera.toWorld(e.clientX, e.clientY);
     this.down = {
       sx: e.clientX,
       sy: e.clientY,
@@ -140,7 +142,7 @@ export class Selection<T> implements Plugin, SelectionCapability<T> {
       this.app.add(this.band);
       this.onMarqueeStart?.();
     }
-    this.band.end = this.app!.renderer.toWorld(e.clientX, e.clientY);
+    this.band.end = this.app!.camera.toWorld(e.clientX, e.clientY);
     const rect = this.marqueeRect();
     this.rect = rect;
     const hits = this.hitRect(rect);

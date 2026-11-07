@@ -68,9 +68,9 @@ export class Pointer implements Plugin, PointerCapability {
       target.addEventListener(type, fn)
       unbinds.push(() => target.removeEventListener(type, fn))
     }
-    // 坐标换算统一走 Renderer（视口状态的唯一属主），回调直接拿世界坐标
+    // 坐标换算统一走 Camera（视口状态的唯一属主），回调直接拿世界坐标
     const world = (e: MouseEvent) =>
-      app.renderer.toWorld(e.clientX, e.clientY)
+      app.camera.toWorld(e.clientX, e.clientY)
     if (handlers.onDown)
       listen(canvas, 'mousedown', (e) =>
         handlers.onDown!(e as MouseEvent, world(e as MouseEvent)),

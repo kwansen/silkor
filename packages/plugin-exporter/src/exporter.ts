@@ -1,7 +1,7 @@
 // 导出插件：把节点列表离屏渲染为图片，通过能力协议暴露，mindmap / flowchart 共用。
 // 只依赖 Core 的 Node 渲染管线（node.render + getBounds 契约），不依赖任何领域包，
 // 消费方按能力键消费（app.require(EXPORT_CAPABILITY)），不 import 本插件类型。
-import { Renderer, capabilityKey } from "@silker/core";
+import { Renderer, Camera, capabilityKey } from "@silker/core";
 import type { App, Bounds, Node, Plugin } from "@silker/core";
 
 // 导出选项
@@ -76,14 +76,16 @@ export class Exporter implements Plugin {
     // 必须在构造之后再设置实际导出尺寸；基准变换保持恒等，缩放全部交给视口
     // （render() 会叠加 viewport.scale，基准再乘 scale 会导致双重放大、内容被裁切）
     const canvas = document.createElement("canvas");
-    const renderer = new Renderer(canvas);
+    // 离屏相机：视口平移使内容左上角落在 padding 处；缩放全部交给相机
+    // （render() 会叠加 camera.scale，基准再乘 scale 会导致双重放大、内容被裁切）
+    const camera = new Camera(canvas);
+    const renderer = new Renderer(canvas, camera);
     canvas.width = Math.ceil(w * scale);
     canvas.height = Math.ceil(h * scale);
     renderer.width = canvas.width;
     renderer.height = canvas.height;
 
-    // 视口平移使内容包围盒左上角落在 padding 处，再渲染全部节点
-    renderer.setViewport({
+    camera.setViewport({
       x: (padding - b.minX) * scale,
       y: (padding - b.minY) * scale,
       scale,

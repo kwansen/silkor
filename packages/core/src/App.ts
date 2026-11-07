@@ -1,20 +1,19 @@
 import type { Node } from "./Node"
 import type { Plugin } from "./Plugin"
 import { Renderer } from "./Renderer"
+import { Camera } from "./Camera"
+import { CapabilityRegistry } from "./CapabilityRegistry"
 import type { CapabilityKey, CapabilityMeta } from "./Capability"
-
-// 能力注册条目（内部）：绑定 provider 身份，previous 保留被覆盖的完整上一层条目
-interface Registration {
-  impl: unknown
-  meta: CapabilityMeta
-  provider: Plugin | null
-  previous: Registration | null
-}
 
 export class App {
   canvas: HTMLCanvasElement
   children: Node[] = []
   renderer: Renderer
+  // 相机：视口状态唯一属主（平移/缩放/坐标换算/变化通知），渲染器只消费
+  camera: Camera
+  // 拖拽判定阈值（屏幕像素）：位移超过该值视为拖拽而非点击。
+  // 画布点击分发的机制层常量；场景内同类阈值（如框选成框）各自声明
+  static readonly DRAG_THRESHOLD = 3
   // 空白点击回调：点击画布未命中任何节点时触发（供外部取消激活态等）
   onBlankClick: ((e: MouseEvent) => void) | null = null
   // 鼠标按下位置：用于区分点击与拖拽平移（click 在拖拽后仍会触发）
@@ -22,7 +21,8 @@ export class App {
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
-    this.renderer = new Renderer(canvas)
+    this.camera = new Camera(canvas)
+    this.renderer = new Renderer(canvas, this.camera)
     canvas.addEventListener('mousedown', (e) => {
       this.downPoint = { x: e.clientX, y: e.clientY }
     })
@@ -58,12 +58,12 @@ export class App {
     })
   }
 
-  // 处理画布点击：屏幕坐标经视口逆变换为世界坐标，再找命中节点触发 onClick
+  // 处理画布点击：屏幕坐标经相机逆变换为世界坐标，再找命中节点触发 onClick
   private onCanvasClick(e: MouseEvent) {
-    const { x, y } = this.renderer.toWorld(e.clientX, e.clientY)
+    const { x, y } = this.camera.toWorld(e.clientX, e.clientY)
     // 拖拽（位移超过阈值）不视为点击：既不激活节点也不触发空白点击（如框选结束落在节点上）
     if (this.downPoint
-      && Math.hypot(e.clientX - this.downPoint.x, e.clientY - this.downPoint.y) > 3) return
+      && Math.hypot(e.clientX - this.downPoint.x, e.clientY - this.downPoint.y) > App.DRAG_THRESHOLD) return
     for (let i = this.children.length - 1; i >= 0; i--) {
       const hit = this.children[i].hitNode(x, y)
       if (hit) {
@@ -87,60 +87,46 @@ export class App {
     }
   }
 
-  // 卸载插件：dispose（幂等）→ 撤销/恢复其注册的能力（有被覆盖的上层实现则恢复，否则移除）
+  // 卸载插件：dispose（幂等）→ 注册表沿 previous 链撤销/恢复其能力
+  // （恢复最近一层 provider 仍在线的实现，乱序卸载安全）
   uninstall(plugin: Plugin) {
     if (!this.plugins.delete(plugin)) return
     plugin.dispose?.()
-    for (const [name, reg] of this.capabilities) {
-      if (reg.provider === plugin) {
-        if (reg.previous) this.capabilities.set(name, reg.previous)
-        else this.capabilities.delete(name)
-      }
-    }
+    this.capabilities.revoke(plugin)
   }
 
-  // 已安装插件（幂等 use/uninstall 的依据）
+  // 已安装插件（幂等 use/uninstall 的依据；注册表恢复 previous 链时据此判断 provider 是否在线）
   private plugins = new Set<Plugin>()
   // 正在 install 的插件：install 期间 provide 的能力自动绑定其身份
   private installing: Plugin | null = null
 
-  // 能力注册表（开放协议）：任何插件 install 时都可注册能力（官方或第三方），
-  // 其他插件按能力键消费——依赖能力名与契约，不依赖提供能力的具体插件。
-  // 条目绑定 provider 身份并保留被覆盖的完整上一层条目（含其 provider 链），供卸载时撤销/恢复
-  private capabilities = new Map<string, Registration>()
+  // 能力注册表：发现、注册、覆盖与撤销/恢复机制的唯一实现（App 是装配门面）
+  private capabilities = new CapabilityRegistry(
+    (provider) => provider === null || this.plugins.has(provider),
+  )
 
   // 注册能力：meta 缺省时版本记 1.0、提供方留空；同名重复注册视为替换（后装插件可覆盖），
-  // 被覆盖条目随新条目保存，provider 卸载时恢复
+  // 被覆盖条目保存于 previous 链，provider 卸载时恢复
   provide<T>(
     key: CapabilityKey<T>,
     impl: T,
     meta?: Partial<CapabilityMeta>,
   ) {
-    this.capabilities.set(key.name, {
-      impl,
-      meta: { version: meta?.version ?? "1.0", provider: meta?.provider ?? "" },
-      provider: this.installing,
-      previous: this.capabilities.get(key.name) ?? null,
-    })
+    this.capabilities.provide(key, impl, meta, this.installing)
   }
 
   // 按能力键查找（可缺省）：能力未注册时返回 undefined，消费方自行降级
   capability<T>(key: CapabilityKey<T>): T | undefined {
-    return this.capabilities.get(key.name)?.impl as T | undefined
+    return this.capabilities.capability(key)
   }
 
   // 显式依赖：能力必须存在，缺失即抛错（尽早暴露装配问题）
   require<T>(key: CapabilityKey<T>): T {
-    const entry = this.capabilities.get(key.name)
-    if (!entry) throw new Error(`Capability "${key.name}" is not registered`)
-    return entry.impl as T
+    return this.capabilities.require(key)
   }
 
   // 能力发现：列出全部已注册能力（名称/版本/提供方），供调试或插件互查
   listCapabilities(): (CapabilityMeta & { name: string })[] {
-    return [...this.capabilities].map(([name, entry]) => ({
-      name,
-      ...entry.meta,
-    }))
+    return this.capabilities.listCapabilities()
   }
 }

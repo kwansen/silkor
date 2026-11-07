@@ -30,8 +30,5 @@
       "onFail": "download"
     }
   },
-  "type": "module",
-  "dependencies": {
-    "@chenglou/pretext": "^0.0.8"
-  }
+  "type": "module"
 }

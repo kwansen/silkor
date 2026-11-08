@@ -16,7 +16,7 @@ export abstract class ShapeNode extends Node {
 
   constructor(options: ShapeNodeOptions = {}) {
     super(options)
-    Object.assign(this, options)
+    this.assignOptions(options)
   }
 
   // 构建形状路径（路径坐标为相对坐标，原点已由 Renderer 平移到节点左上角）

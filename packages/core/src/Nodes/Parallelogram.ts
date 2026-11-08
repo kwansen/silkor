@@ -12,7 +12,7 @@ export class Parallelogram extends ShapeNode {
 
   constructor(options: ParallelogramOptions = {}) {
     super(options)
-    Object.assign(this, options)
+    this.assignOptions(options)
   }
 
   // 静态顶点计算：顶部边向 skew 方向平移（包围盒本地坐标，原点在左上角）

@@ -13,7 +13,7 @@ export class Triangle extends ShapeNode {
 
   constructor(options: TriangleOptions = {}) {
     super(options)
-    Object.assign(this, options)
+    this.assignOptions(options)
   }
 
   // 静态顶点计算：按朝向返回三个顶点（包围盒本地坐标，原点在左上角）

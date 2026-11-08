@@ -41,7 +41,7 @@ export class Edge extends Node {
 
   constructor(options: EdgeOptions = {}) {
     super(options);
-    Object.assign(this, options);
+    this.assignOptions(options);
   }
 
   // 返回连线起止坐标

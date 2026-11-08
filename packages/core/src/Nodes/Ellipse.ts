@@ -4,11 +4,6 @@ export interface EllipseOptions extends ShapeNodeOptions {}
 
 // 椭圆节点：width/height 为包围盒尺寸，椭圆内切于该包围盒（圆心在盒中心）
 export class Ellipse extends ShapeNode {
-  constructor(options: EllipseOptions = {}) {
-    super(options)
-    Object.assign(this, options)
-  }
-
   // 静态路径构建：给定几何参数直接画内切椭圆，供外部复用同一套绘制（实例 render 也走这里）
   static buildPath(ctx: CanvasRenderingContext2D, width: number, height: number) {
     ctx.ellipse(width / 2, height / 2, width / 2, height / 2, 0, 0, Math.PI * 2)

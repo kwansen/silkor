@@ -84,7 +84,7 @@ export class Text extends Node {
 
   constructor(options: TextOptions = {}) {
     super(options)
-    Object.assign(this, options)
+    this.assignOptions(options)
     if (this.widthRange) {
       const [min, max] = this.widthRange
       this.widthRange = [Math.min(min, max), Math.max(min, max)]

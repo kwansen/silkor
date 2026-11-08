@@ -92,12 +92,19 @@ export abstract class Node {
     if (options.height === undefined) {
       this.autoHeight = true
     }
-    // children/parent 是结构字段不来自 options：剔除以防自有属性遮蔽只读视图
+    this.assignOptions(options)
+    this.id ??= crypto.randomUUID()
+  }
+
+  // options 回填的唯一收口：基类与子类构造共用。
+  // 子类字段初始化器在 super() 返回后执行，会覆盖基类已回填的值，
+  // 声明了字段初始化器的子类须在构造中再次回填，且必须走本方法：
+  // children/parent 是结构字段不来自 options，须剔除以防自有属性遮蔽只读视图
+  protected assignOptions(options: object) {
     const rest = { ...options } as Record<string, unknown>
     delete rest.children
     delete rest.parent
     Object.assign(this, rest)
-    this.id ??= crypto.randomUUID()
   }
   //#endregion
 

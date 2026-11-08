@@ -9,7 +9,7 @@ export class Rect extends ShapeNode {
 
   constructor(options: RectOptions = {}) {
     super(options)
-    Object.assign(this, options)
+    this.assignOptions(options)
   }
 
   // 静态路径构建：给定几何参数直接画圆角矩形，供外部复用同一套绘制（实例 render 也走这里）

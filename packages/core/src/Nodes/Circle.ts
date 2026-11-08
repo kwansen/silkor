@@ -13,7 +13,6 @@ export class Circle extends Ellipse {
       options.height ??= options.radius * 2
     }
     super(options)
-    Object.assign(this, options)
   }
 
   get radius() {

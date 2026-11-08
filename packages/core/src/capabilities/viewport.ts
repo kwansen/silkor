@@ -8,6 +8,8 @@ export interface ViewportCapability {
   beginPan(e: MouseEvent): void
   // 按内容包围盒拟合视口（缩放 + 居中）
   fit(bounds: Bounds, padding?: number): void
+  // 居中视口：保持当前缩放不变，仅平移使包围盒中心对齐画布中心（节点视觉大小不变）
+  center(bounds: Bounds): void
 }
 
 // 能力键：导出供消费方查询

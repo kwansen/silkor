@@ -75,6 +75,24 @@ export class Viewport implements Plugin, ViewportCapability {
     this.app.requestCameraRender()
   }
 
+  // 居中视口：保持当前缩放不变，仅平移使内容包围盒中心对齐画布中心
+  //（与 fit 的区别：不改缩放，节点视觉大小不变）；画布尚无尺寸时跳过
+  center(bounds: Bounds) {
+    if (!this.app || !this.canvas) return
+    const rect = this.canvas.getBoundingClientRect()
+    if (!rect.width || !rect.height) return
+    const vp = this.app.camera.viewport
+    const cx = (bounds.minX + bounds.maxX) / 2
+    const cy = (bounds.minY + bounds.maxY) / 2
+    this.app.camera.setViewport({
+      ...vp,
+      x: rect.width / 2 - cx * vp.scale,
+      y: rect.height / 2 - cy * vp.scale,
+    })
+    // 相机-only 变更：走快照 blit 快速路径，不遍历节点树
+    this.app.requestCameraRender()
+  }
+
   // 滚轮缩放：以鼠标所在位置为中心调整缩放并重渲染
   private onWheel(e: WheelEvent, app: App) {
     e.preventDefault()

@@ -54,6 +54,8 @@ beforeEach(() => {
     rafQueue.push(() => cb(0));
     return rafQueue.length;
   });
+  // 边缘自动平移循环的撤销：测试内 rAF 只入队不执行，撤销为无操作即可
+  vi.stubGlobal("cancelAnimationFrame", () => {});
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
   vi.stubGlobal("window", Object.assign(fakeWindow, { devicePixelRatio: 1 }));
 });

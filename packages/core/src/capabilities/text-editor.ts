@@ -1,6 +1,6 @@
 import { capabilityKey } from '../Capability'
 import type { Node } from '../Node'
-import type { Text } from '../Nodes/Text'
+import type { Text } from '../nodes/Text'
 
 // 文本编辑能力接口：文本节点上的可编辑覆盖层（显示原语）。
 // 覆盖层只有"隐藏/显示"两态：隐藏时文字由 canvas 渲染（覆盖层空缓冲、透明沉底），

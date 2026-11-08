@@ -1,4 +1,4 @@
-﻿import { Text } from '@silker/core'
+﻿﻿import { Text } from '@silker/core'
 import type { App, Node, Plugin } from '@silker/core'
 import { TEXT_EDITOR_CAPABILITY } from '@silker/core'
 import type { TextEditorCapability } from '@silker/core'

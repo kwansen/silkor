@@ -149,11 +149,19 @@ export class Text extends Node {
         }
         this.lines = lines
       } else {
-        // 子分支二B：没有范围就无法自动换行
-
-        this.width = textWidth + pl + pr
-        this.height = this.fontSize * this.lineHeight
-        this.lines = [this.text]
+        // 子分支二B：没有范围就无法软换行，但硬换行（\n）仍须支持——
+        // 按段拆行（空段保留为空行），宽度取最宽段，高度随行数增长
+        //（此前只算单行，回车换行既不涨高也无法逐行渲染）
+        measurer.style.whiteSpace = 'pre'
+        measurer.style.width = 'max-content'
+        const segs = this.text.split('\n')
+        let maxSegWidth = 0
+        for (const seg of segs) {
+          measurer.textContent = seg
+          maxSegWidth = Math.max(maxSegWidth, measurer.getBoundingClientRect().width)
+        }
+        this.width = maxSegWidth + pl + pr
+        this.lines = segs
       }
     } else if (!this.autoWidth && !this.wrap) {
       // 分支三：非自动宽度且不自动换行

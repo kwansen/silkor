@@ -6,6 +6,7 @@ export { capabilityKey, type CapabilityKey, type CapabilityMeta } from './Capabi
 export { CapabilityRegistry } from './CapabilityRegistry'
 export { Camera, type CameraState } from './Camera'
 export { Renderer } from './Renderer'
+export { EdgePan } from './EdgePan'
 export { Rect } from './Nodes/Rect'
 export { Text } from './Nodes/Text'
 export { Edge, pointsBounds } from './Nodes/Edge'

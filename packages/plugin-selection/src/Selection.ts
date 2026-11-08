@@ -1,4 +1,5 @@
-import type { App, Plugin } from "@silker/core";
+import { App, EdgePan } from "@silker/core";
+import type { Plugin } from "@silker/core";
 import { selectionCapabilityKey } from "@silker/core";
 import type {
   MarqueeRect as Bounds,
@@ -34,11 +35,10 @@ export class Selection<T> implements Plugin, SelectionCapability<T> {
   private armed = false;
   private rect: Bounds | null = null;
   private band: MarqueeBand | null = null;
-  // 边缘自动平移：成框后鼠标贴近画布边缘时持续平移视口（越近越快），松手即停。
-  // 平移改变世界↔屏幕映射，选框终点按最后鼠标屏幕坐标重算（起点定格在世界坐标不动），
-  // 呈现走相机-only 快速路径：内容层从快照差量 blit + 天空层重绘，两层同步移动且不重光栅化场景
-  private lastMove: { clientX: number; clientY: number } | null = null;
-  private panFrame = 0;
+  // 边缘自动平移（core 机制）：成框后指针贴近画布边缘时持续平移视口，选框终点
+  // 按指针屏幕坐标重算（起点定格在世界坐标不动）；相机-only 呈现（内容层位图
+  // blit + 天空层重绘）由 core 统一负责，这里只重算选框与命中
+  private edgePan: EdgePan | null = null;
   // 命中规则（公开可写）：消费方 install 后按需赋值
   hitRect: (rect: Bounds) => T[];
 
@@ -54,6 +54,8 @@ export class Selection<T> implements Plugin, SelectionCapability<T> {
   install(app: App) {
     this.app = app;
     this.band = new MarqueeBand(() => app.camera.scale);
+    // 边缘自动平移会话：每次平移后按指针屏幕坐标重算选框终点与命中
+    this.edgePan = new EdgePan(app, (x, y) => this.panTo(x, y));
     window.addEventListener("mousemove", this.onMove);
     window.addEventListener("mouseup", this.onUp);
     app.provide(
@@ -64,7 +66,8 @@ export class Selection<T> implements Plugin, SelectionCapability<T> {
 
   // 卸载：撤销监听与场景内的选框节点，重置模型（不触发 onChange——宿主在卸载自身）
   dispose() {
-    this.stopEdgePan();
+    this.edgePan?.stop();
+    this.edgePan = null;
     window.removeEventListener("mousemove", this.onMove);
     window.removeEventListener("mouseup", this.onUp);
     if (this.app && this.band) this.app.remove(this.band);
@@ -74,7 +77,6 @@ export class Selection<T> implements Plugin, SelectionCapability<T> {
     this.armed = false;
     this.rect = null;
     this.list = [];
-    this.lastMove = null;
   }
 
   //#region 选中模型
@@ -126,8 +128,8 @@ export class Selection<T> implements Plugin, SelectionCapability<T> {
       wx: w.x,
       wy: w.y,
     };
-    // 边缘自动平移的鼠标位置基准：即使尚未收到 mousemove 也先记按下位置
-    this.lastMove = { clientX: e.clientX, clientY: e.clientY };
+    // 边缘自动平移的指针位置基准：即使尚未收到 mousemove 也先记按下位置
+    this.edgePan?.update(e.clientX, e.clientY);
     this.armed = false;
     this.rect = null;
   }
@@ -135,7 +137,7 @@ export class Selection<T> implements Plugin, SelectionCapability<T> {
   private onMove = (e: MouseEvent) => {
     const down = this.down;
     if (!down || !this.app || !this.band) return;
-    this.lastMove = { clientX: e.clientX, clientY: e.clientY };
+    this.edgePan?.update(e.clientX, e.clientY);
     // 位移超过阈值才成框：挂入选框节点（场景顶层）并通知首帧
     if (!this.armed) {
       if (
@@ -148,8 +150,8 @@ export class Selection<T> implements Plugin, SelectionCapability<T> {
       // marquee 移动只走轻量路径，不重光栅化场景）
       this.app.addOverlay(this.band);
       this.onMarqueeStart?.();
-      // 成框即启动边缘自动平移循环：拖到画布边缘时视口持续平移（松手即停）
-      this.startEdgePan();
+      // 成框即启动边缘自动平移会话：拖到画布边缘时视口持续平移（松手即停）
+      this.edgePan?.start(e.clientX, e.clientY);
     }
     this.band.end = this.app!.camera.toWorld(e.clientX, e.clientY);
     const rect = this.marqueeRect();
@@ -162,8 +164,7 @@ export class Selection<T> implements Plugin, SelectionCapability<T> {
   private onUp = () => {
     const down = this.down;
     if (!down || !this.app || !this.band) return;
-    this.stopEdgePan();
-    this.lastMove = null;
+    this.edgePan?.stop();
     this.down = null;
     const armed = this.armed;
     this.armed = false;
@@ -193,56 +194,17 @@ export class Selection<T> implements Plugin, SelectionCapability<T> {
   //#endregion
 
   //#region 边缘自动平移
-  // 启动边缘自动平移的 rAF 常驻循环（成框时调用；循环自身在会话结束/卸载后自行退出）
-  private startEdgePan() {
-    if (this.panFrame) return;
-    this.panFrame = requestAnimationFrame(this.edgePan);
+  // 边缘平移帧回调（core EdgePan 每次平移后调用）：选框起点定格在世界坐标，
+  // 终点跟随平移后的指针世界坐标；重新命中并回调，与 onMove 语义一致。
+  // 相机-only 呈现（内容层位图 blit + 天空层重绘，两层同步移动）由 EdgePan 完成
+  private panTo(clientX: number, clientY: number) {
+    if (!this.app || !this.band || !this.down || !this.armed) return;
+    this.band.end = this.app.camera.toWorld(clientX, clientY);
+    const rect = this.marqueeRect();
+    this.rect = rect;
+    const hits = this.hitRect(rect);
+    this.onMarqueeMove?.(rect, hits);
   }
-
-  // 停止边缘自动平移循环（松手/dispose 时调用，幂等）
-  private stopEdgePan() {
-    if (this.panFrame) {
-      cancelAnimationFrame(this.panFrame);
-      this.panFrame = 0;
-    }
-  }
-
-  // 边缘自动平移帧循环：鼠标贴近画布边缘时持续平移视口（越近越快），平移后按最后
-  // 鼠标屏幕坐标重算选框终点（起点定格在世界坐标）与命中结果，并按相机-only 路径
-  // 呈现——内容层从快照差量 blit、天空层（选框）重绘，两层同步移动且不重光栅化场景
-  private edgePan = () => {
-    this.panFrame = 0;
-    const app = this.app;
-    const lm = this.lastMove;
-    // 会话已结束（onUp/dispose 置空）：循环自行退出
-    if (!this.down || !this.armed || !app || !this.band || !lm) return;
-    const rect = app.canvas.getBoundingClientRect();
-    // 画布无尺寸（测试桩/离屏）：无可平移区域，仅续帧不做平移
-    if (rect.width > 0 && rect.height > 0) {
-      const zone = 48;
-      const axis = (near: number, far: number) => {
-        // 触顶/触左 → 平移量增大（露出上/左侧内容）；触底/触右 → 平移量减小（露出下/右侧内容）
-        if (near < zone) return Math.max(4, 12 * (1 - near / zone));
-        if (far < zone) return -Math.max(4, 12 * (1 - far / zone));
-        return 0;
-      };
-      const vx = axis(lm.clientX - rect.left, rect.right - lm.clientX);
-      const vy = axis(lm.clientY - rect.top, rect.bottom - lm.clientY);
-      if (vx || vy) {
-        const vp = app.camera.viewport;
-        app.camera.setViewport({ ...vp, x: vp.x + vx, y: vp.y + vy });
-        // 终点跟随平移后的鼠标世界坐标；重新命中并回调，与 onMove 语义一致
-        this.band.end = app.camera.toWorld(lm.clientX, lm.clientY);
-        const r = this.marqueeRect();
-        this.rect = r;
-        const hits = this.hitRect(r);
-        // 相机-only 快速路径：内容层差量 blit + 天空层重绘，不全量渲染
-        app.requestCameraRender();
-        this.onMarqueeMove?.(r, hits);
-      }
-    }
-    this.panFrame = requestAnimationFrame(this.edgePan);
-  };
   //#endregion
 }
 

@@ -18,7 +18,12 @@ export type { ViewportCapability } from './capabilities/viewport'
 export { VIEWPORT_CAPABILITY } from './capabilities/viewport'
 export type { CommandDefinition, CommandCapability } from './capabilities/command'
 export { COMMAND_CAPABILITY } from './capabilities/command'
-export type { HistoryCommand, HistoryCapability } from './capabilities/history'
+export type {
+  HistoryCommand,
+  HistoryCapability,
+  SerializedCommand,
+  HistorySnapshot,
+} from './capabilities/history'
 export { HISTORY_CAPABILITY, CompositeCommand, compose } from './capabilities/history'
 export type { MarqueeRect, SelectionChange, SelectionCapability } from './capabilities/selection'
 export { selectionCapabilityKey } from './capabilities/selection'

@@ -16,31 +16,35 @@ export class Triangle extends ShapeNode {
     Object.assign(this, options)
   }
 
-  // 按朝向返回三个顶点（本地相对坐标）
-  private points(): { x: number; y: number }[] {
-    const { width: w, height: h, direction } = this
+  // 静态顶点计算：按朝向返回三个顶点（包围盒本地坐标，原点在左上角）
+  static points(width: number, height: number, direction: TriangleDirection = 'up'): { x: number; y: number }[] {
     switch (direction) {
       case 'down':
-        return [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w / 2, y: h }]
+        return [{ x: 0, y: 0 }, { x: width, y: 0 }, { x: width / 2, y: height }]
       case 'left':
-        return [{ x: w, y: 0 }, { x: w, y: h }, { x: 0, y: h / 2 }]
+        return [{ x: width, y: 0 }, { x: width, y: height }, { x: 0, y: height / 2 }]
       case 'right':
-        return [{ x: 0, y: 0 }, { x: w, y: h / 2 }, { x: 0, y: h }]
+        return [{ x: 0, y: 0 }, { x: width, y: height / 2 }, { x: 0, y: height }]
       default:
-        return [{ x: w / 2, y: 0 }, { x: w, y: h }, { x: 0, y: h }]
+        return [{ x: width / 2, y: 0 }, { x: width, y: height }, { x: 0, y: height }]
     }
   }
 
-  protected buildPath(ctx: CanvasRenderingContext2D) {
-    const points = this.points()
+  // 静态路径构建：给定几何参数直接画三角形，供外部复用同一套绘制（实例 render 也走这里）
+  static buildPath(ctx: CanvasRenderingContext2D, width: number, height: number, direction: TriangleDirection = 'up') {
+    const points = Triangle.points(width, height, direction)
     ctx.moveTo(points[0].x, points[0].y)
     ctx.lineTo(points[1].x, points[1].y)
     ctx.lineTo(points[2].x, points[2].y)
     ctx.closePath()
   }
 
+  protected buildPath(ctx: CanvasRenderingContext2D) {
+    Triangle.buildPath(ctx, this.width, this.height, this.direction)
+  }
+
   hitTest(worldX: number, worldY: number) {
     const p = this.localTransformInverse.transformPoint({ x: worldX, y: worldY })
-    return ShapeNode.pointInConvexPolygon(p.x, p.y, this.points())
+    return ShapeNode.pointInConvexPolygon(p.x, p.y, Triangle.points(this.width, this.height, this.direction))
   }
 }

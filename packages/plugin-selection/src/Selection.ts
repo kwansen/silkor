@@ -208,6 +208,3 @@ export class Selection<T> implements Plugin, SelectionCapability<T> {
   //#endregion
 }
 
-// 能力键重导出：消费方从此包取键
-export { selectionCapabilityKey } from "@silker/core";
-export type { MarqueeRect as Bounds, SelectionCapability, SelectionChange } from "@silker/core";

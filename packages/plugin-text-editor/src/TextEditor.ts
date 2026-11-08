@@ -205,10 +205,17 @@ export class TextEditor implements Plugin, TextEditorCapability {
   // 绑定输入与失焦事件：输入同步文本并重渲染
   // 失焦不移除覆盖层（虚拟 text 常驻可编辑，隐藏仅是视觉样式），只切回隐藏态并通知外部
   private bindEvents(el: HTMLDivElement, text: Text, app: App) {
-    // 右键菜单粘贴不经过 keydown：粘贴前先显示覆盖层（canvas 停止渲染文字），
-    // 剪贴板内容随后追加在光标处
-    el.addEventListener('paste', () => {
+    // 拦截粘贴做归一化：默认行为会把剪贴板富文本 HTML（内联样式、加粗、字色等）原样
+    // 插入 contenteditable，污染输入缓冲区，与 canvas 按节点样式渲染的文字不一致。
+    // 改为只取 text/plain 经 insertText 插入光标处——覆盖层容器已应用节点自身字体
+    // 样式，插入的纯文本自然继承节点样式。用 execCommand 而非手工操作 Range，以保留
+    // 浏览器原生撤销栈；粘贴不发生在 IME 组合窗口内，同步 execCommand 不会打断组合
+    el.addEventListener('paste', e => {
+      e.preventDefault()
+      // 右键菜单粘贴不经过 keydown：粘贴前先显示覆盖层（canvas 停止渲染文字）
       this.show()
+      const text = e.clipboardData?.getData('text/plain') ?? ''
+      if (text) document.execCommand('insertText', false, text)
     })
     el.addEventListener('input', () => {
       // 隐藏态下的意外 input 不同步内容，显示后的输入才经此处同步节点文本

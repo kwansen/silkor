@@ -99,11 +99,16 @@ export abstract class Node {
   // options 回填的唯一收口：基类与子类构造共用。
   // 子类字段初始化器在 super() 返回后执行，会覆盖基类已回填的值，
   // 声明了字段初始化器的子类须在构造中再次回填，且必须走本方法：
-  // children/parent 是结构字段不来自 options，须剔除以防自有属性遮蔽只读视图
+  // children/parent 是结构字段不来自 options，须剔除以防自有属性遮蔽只读视图；
+  // 值为 undefined 的选项视为"未提供"，不回填——否则二次回填会把基类构造期
+  // 已生成的默认值（如 id 的 UUID）重新覆盖为 undefined
   protected assignOptions(options: object) {
     const rest = { ...options } as Record<string, unknown>
     delete rest.children
     delete rest.parent
+    for (const key of Object.keys(rest)) {
+      if (rest[key] === undefined) delete rest[key]
+    }
     Object.assign(this, rest)
   }
   //#endregion

@@ -60,6 +60,12 @@ export class History implements Plugin, HistoryCapability {
     return cmd;
   }
 
+  // 清空双栈：场景销毁时由场景调用，栈内命令闭包引用已销毁的场景对象，全部废弃
+  clear(): void {
+    this.undoStack = [];
+    this.redoStack = [];
+  }
+
   get canUndo(): boolean {
     return this.undoStack.length > 0;
   }

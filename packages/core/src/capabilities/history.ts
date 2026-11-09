@@ -28,6 +28,9 @@ export interface HistoryCapability {
   undo(): HistoryCommand | undefined;
   // 重做：与 undo 对称，方向相反
   redo(): HistoryCommand | undefined;
+  // 清空撤销/重做双栈：场景销毁时调用——栈内命令闭包引用该场景的节点/模型，
+  // 场景销毁后命令全部失效，必须随场景一起废弃，避免残留影响后继场景
+  clear?(): void;
   // 栈可用性：供宿主按钮禁用态与快捷键守卫
   readonly canUndo: boolean;
   readonly canRedo: boolean;

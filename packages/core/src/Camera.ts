@@ -58,4 +58,15 @@ export class Camera {
       y: y * this.scale + this.y + rect.top,
     }
   }
+
+  // 将世界坐标点居中到视口中央（保持当前缩放）：AI 编辑/程序化新建节点后
+  // 聚焦落点，避免变更发生在视口外"看不到效果"
+  centerOn(x: number, y: number) {
+    const rect = this.canvas.getBoundingClientRect()
+    this.setViewport({
+      x: rect.width / 2 - x * this.scale,
+      y: rect.height / 2 - y * this.scale,
+      scale: this.scale,
+    })
+  }
 }

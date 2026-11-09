@@ -12,7 +12,7 @@ export interface PathSegment {
 }
 
 // 连线形状
-export type EdgeShape = "bezier" | "path" | "zBezier" | "rPath";
+export type EdgeShape = "bezier" | "path" | "rPath";
 
 // 连线配置
 export interface EdgeOptions extends NodeOptions {
@@ -28,7 +28,6 @@ export interface EdgeOptions extends NodeOptions {
 // 底层连线节点：与节点无关，按 shape 选择渲染器
 // - bezier：from 到 to 之间绘制三次贝塞尔曲线
 // - path：from 到各目标点间绘制「横-竖-横」Z 字折线（竖笔取两点 x 中点）
-// - zBezier：每段先水平直线引出至两点 x 中点，再以贝塞尔曲线接入目标点
 // - rPath：同 path 的 Z 字折线，第二个弯折用四分之一圆弧做小圆角
 export class Edge extends Node {
   from: EdgePoint = { x: 0, y: 0 };
@@ -62,7 +61,6 @@ export class Edge extends Node {
   // 渲染前刷新锚点再按形状分发到对应渲染器
   render(ctx: CanvasRenderingContext2D) {
     if (this.shape === "path") this.renderPath(ctx);
-    else if (this.shape === "zBezier") this.renderZBezier(ctx);
     else if (this.shape === "rPath") this.renderRPath(ctx);
     else this.renderBezier(ctx);
   }
@@ -100,32 +98,6 @@ export class Edge extends Node {
 
       // ③ 横：水平接入目标点
       ctx.lineTo(seg.to.x, seg.to.y);
-
-      from = seg.to;
-    }
-
-    ctx.stroke();
-  }
-
-  // Z 字贝塞尔渲染器：每段先水平直线引出至两点 x 中点，随后一段贝塞尔曲线
-  // （起止控制点均落在中点 x 上）接入目标点，弯代 Z 字的后两笔
-  protected renderZBezier(ctx: CanvasRenderingContext2D) {
-    if (!this.segments.length) return;
-
-    ctx.strokeStyle = this.color;
-    ctx.lineWidth = this.lineWidth;
-    ctx.beginPath();
-    ctx.moveTo(this.from.x, this.from.y);
-
-    let from = this.from;
-    for (const seg of this.segments) {
-      const mx = (from.x + seg.to.x) / 2;
-
-      // ① 横：直线引出至中点
-      ctx.lineTo(mx, from.y);
-
-      // ② 弯：贝塞尔接入目标点（起止控制点均落在中点 x 上）
-      ctx.bezierCurveTo(mx, from.y, mx, seg.to.y, seg.to.x, seg.to.y);
 
       from = seg.to;
     }

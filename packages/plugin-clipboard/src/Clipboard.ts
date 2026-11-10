@@ -6,9 +6,9 @@
 // 剪贴板三通道设计（Chrome paste 事件读不到自定义 MIME，结构化载荷必须走标准类型）：
 //   text/plain → 人类可读的 tab 缩进文本（entry.text），供飞书/记事本等外部应用
 //                粘贴出层级列表；
-//   text/html  → 可见文本（同 entry.text，white-space:pre 保留 tab）+ data-silker
-//                属性承载 $silker 信封——外部应用渲染可见文本不受影响，silker 的
-//                paste 处理器解析属性还原结构化节点载荷；
+//   text/html  → 嵌套 ul/li 渲染的层级大纲（外部应用粘贴出层级列表）+ 最外层
+//                元素 data-silker 属性承载 $silker 信封——silker 的 paste 处理器
+//                解析属性还原结构化节点载荷；
 //   自定义 MIME（web 前缀）→ 裸载荷，支持该类型的环境优先读取。
 // 复制双路径：mod+c 命令（keydown 拦截后 write() 写系统剪贴板——Chrome 无文本
 // 选区时 Ctrl+C 不派发 copy 事件，命令路径兜底）+ copy 事件（右键菜单复制走
@@ -217,15 +217,58 @@ export class Clipboard implements Plugin, ClipboardCapability {
   }
 }
 
-// text/html 信封：可见文本（white-space:pre 保留 tab，外部应用渲染正常）+
-// data-silker 属性承载 URL 编码的 $silker 信封。属性值经 encodeURIComponent，
-// 不含引号等需转义字符，可靠正则提取
+// text/html 信封：可见部分渲染为嵌套 ul/li 层级列表（外部应用粘贴出大纲列表而非
+// 纯文本块），最外层元素 data-silker 属性承载 URL 编码的 $silker 信封。属性值经
+// encodeURIComponent，不含引号等需转义字符，可靠正则提取
 function toEnvelopeHtml(entry: ClipboardEntry): string {
-  const text = (entry.text ?? "").replace(/[&<>]/g, (c) =>
-    c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;",
-  );
   const encoded = encodeURIComponent(JSON.stringify(toEnvelope(entry)));
-  return `<span data-silker="${encoded}" style="white-space:pre-wrap">${text}</span>`;
+  return `<div data-silker="${encoded}">${toOutlineHtml(entry.text ?? "")}</div>`;
+}
+
+// 大纲文本 → 嵌套列表 HTML：缩进规则与 mindmap parseTextTree 一致（Tab 与 4 空格
+// 组计深度，最小缩进为顶层），栈式构建层级后递归渲染；空行跳过
+function toOutlineHtml(text: string): string {
+  const lines = text
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .filter((l) => l.trim().length);
+  if (!lines.length) return "";
+  const depthOf = (line: string): number => {
+    let tabs = 0;
+    let spaces = 0;
+    for (const ch of line) {
+      if (ch === "\t") {
+        tabs++;
+        spaces = 0;
+      } else if (ch === " ") {
+        spaces++;
+      } else break;
+    }
+    return tabs + Math.floor(spaces / 4);
+  };
+  const esc = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  interface Item {
+    text: string;
+    children: Item[];
+  }
+  const min = Math.min(...lines.map(depthOf));
+  const roots: Item[] = [];
+  const stack: { depth: number; item: Item }[] = [];
+  for (const line of lines) {
+    const depth = Math.max(0, depthOf(line) - min);
+    const item: Item = { text: esc(line.trim()), children: [] };
+    while (stack.length && stack[stack.length - 1]!.depth >= depth) stack.pop();
+    (stack[stack.length - 1]?.item.children ?? roots).push(item);
+    stack.push({ depth, item });
+  }
+  const render = (items: Item[]): string =>
+    `<ul style="margin:0;padding-left:1.5em">` +
+    items
+      .map((i) => `<li>${i.text}${i.children.length ? render(i.children) : ""}</li>`)
+      .join("") +
+    `</ul>`;
+  return render(roots);
 }
 
 function fromEnvelopeHtml(html: string): ClipboardEntry | null {

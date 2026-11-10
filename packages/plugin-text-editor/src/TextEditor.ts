@@ -1,4 +1,4 @@
-﻿﻿import { Text } from '@silker/core'
+﻿﻿import { SILKER_CLIPBOARD_MIME, Text } from '@silker/core'
 import type { App, Node, Plugin } from '@silker/core'
 import { TEXT_EDITOR_CAPABILITY } from '@silker/core'
 import type { TextEditorCapability } from '@silker/core'
@@ -211,6 +211,21 @@ export class TextEditor implements Plugin, TextEditorCapability {
     // 样式，插入的纯文本自然继承节点样式。用 execCommand 而非手工操作 Range，以保留
     // 浏览器原生撤销栈；粘贴不发生在 IME 组合窗口内，同步 execCommand 不会打断组合
     el.addEventListener('paste', e => {
+      // 剪贴板携带 silker 节点载荷（自定义 MIME 或 text/html data-silker 信封）：
+      // 不在此插文字，让 document 级 Clipboard 插件分发粘贴节点——元素级监听先于
+      // document 触发，此处若 preventDefault 会与节点粘贴双重执行（节点+文字）
+      const cd = e.clipboardData
+      const html = cd?.getData('text/html') ?? ''
+      if (cd?.types.includes(SILKER_CLIPBOARD_MIME) || html.includes('data-silker')) return
+      // 隐藏态（激活态）覆盖层不消费粘贴：激活态聚焦的是常驻覆盖层，paste 会打到
+      // 这里——若插文字会唤醒编辑态并替换节点文本。放行给 document 级 Clipboard
+      // 插件分发（纯文本 → pasteText 建子节点；节点载荷 → 粘贴节点树）
+      if (this.hidden) return
+      // 拦截粘贴做归一化：默认行为会把剪贴板富文本 HTML（内联样式、加粗、字色等）原样
+      // 插入 contenteditable，污染输入缓冲区，与 canvas 按节点样式渲染的文字不一致。
+      // 改为只取 text/plain 经 insertText 插入光标处——覆盖层容器已应用节点自身字体
+      // 样式，插入的纯文本自然继承节点样式。用 execCommand 而非手工操作 Range，以保留
+      // 浏览器原生撤销栈；粘贴不发生在 IME 组合窗口内，同步 execCommand 不会打断组合
       e.preventDefault()
       // 右键菜单粘贴不经过 keydown：粘贴前先显示覆盖层（canvas 停止渲染文字）
       this.show()

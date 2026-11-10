@@ -26,6 +26,10 @@ export interface ClipboardConsumer {
   // 粘贴外部纯文本（可选）：剪贴板无 silker 载荷且 text/plain 非空时调用；
   // 场景未注册则外部文本忽略
   pasteText?(text: string): void
+  // 编辑态谓词（可选）：场景文本编辑会话进行中返回 true——此时 copy/paste 事件
+  // 放行原生文本行为。常驻可编辑覆盖层（激活态）不能只凭元素类型判定放行，
+  // 必须以本谓词为准，否则画布粘贴永远被覆盖层截获
+  isEditing?(): boolean
 }
 
 // 剪贴板能力契约：机制由官方 plugin-clipboard 实现（document copy/paste 监听 +

@@ -65,8 +65,15 @@ export class Command implements Plugin, CommandCapability {
   }
 
   private onKeydown = (e: KeyboardEvent) => {
+    const boundId = this.keymap.get(comboOf(e));
+    if (boundId) {
+      console.log(
+        "[clipdbg] keydown", comboOf(e), "->", boundId,
+        "guard=", this.guard ? this.guard(e) : true,
+      );
+    }
     if (this.guard && !this.guard(e)) return;
-    const commandId = this.keymap.get(comboOf(e));
+    const commandId = boundId;
     if (!commandId) return;
     e.preventDefault();
     this.execute(commandId);

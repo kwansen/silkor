@@ -16,6 +16,9 @@ export class App {
   renderer: Renderer
   // 相机：视口状态唯一属主（平移/缩放/坐标换算/变化通知），渲染器只消费
   camera: Camera
+  // 上一帧画布 CSS 尺寸：resize 回调据此计算视口中心的补偿位移量
+  private lastW = 0
+  private lastH = 0
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -31,8 +34,26 @@ export class App {
     // ground 背景层为后续预留位。无父容器（测试/离屏）时退化为无天空层
     this.renderer.sky = this.createSkyCanvas(canvas)
     this.syncSky()
-    // 容器尺寸变化：同步画布物理尺寸并重绘（ResizeObserver 首次观察也触发一次，等价重绘无副作用）
+    // 容器尺寸变化：同步画布物理尺寸并重绘（ResizeObserver 首次观察也触发一次，等价重绘无副作用）；
+    // 尺寸变化时补偿视口偏移，使视口中心对应的世界点保持居中——宿主 UI 开合（如 AI
+    // 侧边栏）或窗口缩放后，正在查看/编辑的节点不会因画布增缩而"漂"出原位置
     new ResizeObserver(() => {
+      const rect = this.canvas.getBoundingClientRect()
+      // 首次观察或画布从不可见（0 尺寸）恢复时不补偿，避免初始挂载整体位移
+      const compensated =
+        this.lastW > 0 &&
+        this.lastH > 0 &&
+        (rect.width !== this.lastW || rect.height !== this.lastH)
+      if (compensated) {
+        const vp = this.camera.viewport
+        this.camera.setViewport({
+          x: vp.x + (rect.width - this.lastW) / 2,
+          y: vp.y + (rect.height - this.lastH) / 2,
+          scale: vp.scale,
+        })
+      }
+      this.lastW = rect.width
+      this.lastH = rect.height
       this.syncSky()
       this.renderer.resize()
       this.render()

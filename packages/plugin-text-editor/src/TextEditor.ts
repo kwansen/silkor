@@ -360,25 +360,29 @@ export class TextEditor implements Plugin, TextEditorCapability {
     el.style.transform = `scale(${vp.scale})`
   }
 
-  // 文本节点越出视口时平移视口，保证文本与编辑框可见（按屏幕坐标判断）
+  // 文本节点越出视口时平移视口，保证文本与编辑框可见（按画布本地屏幕坐标判断）。
+  // 边界取画布尺寸而非 window 尺寸：宿主布局（如 AI 侧边栏并列面板）会压缩画布，
+  // sx/sy 为画布本地坐标，对 window 判断会把节点平移到画布外被裁剪的假视口位置
   private panIntoView(app: App, text: Text) {
     const el = this.el
     if (!el) return
     const vp = app.camera.viewport
     const point = text.getWorldPoint()
-    // 世界坐标换算成屏幕坐标
+    // 世界坐标换算成画布本地屏幕坐标
     const sx = point.x * vp.scale + vp.x
     const sy = point.y * vp.scale + vp.y
     const right = sx + text.width * vp.scale
     const bottom = sy + text.height * vp.scale
+    const w = app.canvas.clientWidth
+    const h = app.canvas.clientHeight
     // 水平：左边界越出左侧则右移，右边界越出右侧则左移
     const dx = sx < 20
       ? 20 - sx
-      : right > window.innerWidth - 20
-        ? window.innerWidth - 20 - right
+      : right > w - 20
+        ? w - 20 - right
         : 0
     // 垂直：超出下边界则上移
-    const dy = bottom > window.innerHeight - 20 ? window.innerHeight - 20 - bottom : 0
+    const dy = bottom > h - 20 ? h - 20 - bottom : 0
     if (dx === 0 && dy === 0) return
     // 平移视口而非节点坐标，保持布局数据不变并触发编辑框对齐
     app.camera.setViewport({ ...vp, x: vp.x + dx, y: vp.y + dy })

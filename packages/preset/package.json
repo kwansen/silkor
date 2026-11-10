@@ -23,6 +23,7 @@
   "license": "ISC",
   "dependencies": {
     "@silker/core": "workspace:*",
+    "@silker/plugin-clipboard": "workspace:*",
     "@silker/plugin-command": "workspace:*",
     "@silker/plugin-exporter": "workspace:*",
     "@silker/plugin-history": "workspace:*",

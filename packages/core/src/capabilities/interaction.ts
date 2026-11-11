@@ -1,4 +1,5 @@
 import { capabilityKey } from "../Capability"
+import type { Node } from "../Node"
 
 // 统一的世界坐标点
 export interface Point {
@@ -41,6 +42,12 @@ export interface CanvasClickCapability {
   // 空白点击回调（覆盖语义）：点击画布未命中任何节点时触发；传 null 取消。
   // 拖拽（位移超过阈值）不视为点击，不会触发
   onBlankClick(handler: ((e: MouseEvent) => void) | null): void
+
+  // 节点点击注册（覆盖语义，同 onBlankClick）：该节点被点击命中时触发，传 null 取消。
+  // 注册表由本能力的实现方（分发插件）持有——点击挂钩收口在分发方，节点模型
+  // 不携带回调字段、生命周期由注册/取消显式管理；回调载荷为命中的节点本身，
+  // 不携带 App（分发方持有 app，消费方经闭包自行取用）
+  onNodeClick(node: Node, handler: ((node: Node) => void) | null): void
 }
 
 // 能力键：导出供消费方查询

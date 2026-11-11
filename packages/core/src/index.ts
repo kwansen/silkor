@@ -32,7 +32,7 @@ export type {
 export { HISTORY_CAPABILITY, CompositeCommand, compose } from './capabilities/history'
 export type { MarqueeRect, SelectionChange, SelectionCapability } from './capabilities/selection'
 export { selectionCapabilityKey } from './capabilities/selection'
-export type { TextEditorCapability } from './capabilities/text-editor'
+export type { EditableText, TextEditorCapability } from './capabilities/text-editor'
 export { TEXT_EDITOR_CAPABILITY } from './capabilities/text-editor'
 export type { ExportOptions, ExporterCapability } from './capabilities/exporter'
 export { EXPORT_CAPABILITY } from './capabilities/exporter'

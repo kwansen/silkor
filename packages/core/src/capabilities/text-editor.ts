@@ -1,6 +1,22 @@
 import { capabilityKey } from '../Capability'
 import type { Node } from '../Node'
-import type { Text } from '../nodes/Text'
+
+// 可编辑文本载荷的最小结构契约：能力接口只依赖此结构，不依赖 Text 具体类型
+// （Text 天然满足该结构；自定义可编辑节点实现同名字段即可接入，与 canEdit
+// 自定义判定配套）。实现方（编辑插件）内部可依赖具体类型；消费方按契约类型
+// 接收载荷，需要具体类型时在场景层自行收窄——场景包本就以具体节点类型工作，
+// 具体类型耦合点收敛在消费侧而非能力契约
+export interface EditableText {
+  // 文本内容（实现方经输入同步读写）
+  text: string
+  // 节点位置与尺寸（实现方定位编辑覆盖层用）
+  x: number
+  y: number
+  width: number
+  height: number
+  // 覆盖层接管文字渲染标志（实现方显隐切换时读写，canvas 据此跳过文字绘制）
+  textHidden: boolean
+}
 
 // 文本编辑能力接口：文本节点上的可编辑覆盖层（显示原语）。
 // 覆盖层只有"隐藏/显示"两态：隐藏时文字由 canvas 渲染（覆盖层空缓冲、透明沉底），
@@ -10,7 +26,7 @@ import type { Text } from '../nodes/Text'
 // 与 ViewportCapability 同一套注册协议（契约由能力提供方定义，实现可替换）
 export interface TextEditorCapability {
   // 挂载隐藏覆盖层（空缓冲、透明沉底，文字仍由 canvas 渲染）并聚焦；重复调用先卸载旧的
-  start(text: Text): void
+  start(text: EditableText): void
   // 显示覆盖层接管文字渲染：fill 为 true 时填入节点文本（点击路径），
   // 为 false 时保持空缓冲（打字/IME/粘贴路径，输入经 input 事件同步替换节点文本）；
   // point 为点击屏幕坐标，经浏览器命中测试把光标折叠到对应字符位置，命中失败时聚焦到末尾
@@ -28,13 +44,13 @@ export interface TextEditorCapability {
 
   //#region 场景接线回调（可选，消费方赋值；实现方在对应时机触发）
   // 输入同步：覆盖层文本变化（打字/IME/粘贴）后触发，携带当前编辑的文本节点
-  onInput?: (text: Text) => void
+  onInput?: (text: EditableText) => void
   // 编辑框就绪：覆盖层挂载并聚焦后触发，消费可绑定按键/两态机
-  onEditStart?: (el: HTMLDivElement, text: Text) => void
+  onEditStart?: (el: HTMLDivElement, text: EditableText) => void
   // 编辑结束：覆盖层失焦/提交后触发
   onEditEnd?: () => void
   // 节点点击激活：bind 绑定的文本节点被点击时触发
-  onActivate?: (text: Text) => void
+  onActivate?: (text: EditableText) => void
   //#endregion
 }
 

@@ -20,7 +20,7 @@ export function officialPlugins(): Plugin[] {
     new Command(), // 命令注册与默认键位
     new Viewport(), // 视口（平移/缩放/适应视图）
     new Pointer(), // 指针事件绑定与坐标换算
-    new Clicker(), // 点击分发（拖拽阈值判定/节点 onClick/空白点击）
+    new Clicker(), // 点击分发（拖拽阈值判定/节点点击注册/空白点击）
     new Exporter(), // 画布导出
     new TextEditor(), // 节点文本编辑
     new Selection(), // 单选/多选/框选模型

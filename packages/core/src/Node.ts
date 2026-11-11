@@ -1,4 +1,3 @@
-import type { App } from './App'
 // 类型
 export interface NodeOptions {
   id?: string
@@ -280,7 +279,4 @@ export abstract class Node {
     }
     return this.hitTest(px, py) ? this : null
   }
-
-  // 点击钩子：接收 app 以便回调里操作画布；null 表示无处理（插件卸载时解绑用）
-  onClick: ((app: App) => void) | null = null
 }

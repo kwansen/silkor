@@ -1,5 +1,5 @@
-﻿﻿﻿﻿import { SILKER_CLIPBOARD_MIME, Text } from '@silker/core'
-import type { App, Node, Plugin } from '@silker/core'
+﻿﻿﻿﻿import { CANVAS_CLICK_CAPABILITY, SILKER_CLIPBOARD_MIME, Text } from '@silker/core'
+import type { App, EditableText, Node, Plugin } from '@silker/core'
 import { TEXT_EDITOR_CAPABILITY } from '@silker/core'
 import type { TextEditorCapability } from '@silker/core'
 import { TextEditorView } from './TextEditorView'
@@ -9,13 +9,13 @@ import { TextEditorPosition } from './TextEditorPosition'
 // 场景包以能力键取到本插件实例后即可绑定自身业务回调，无需在构造期持有场景引用
 export interface TextEditorOptions {
   // 输入回调（文本已更新），可用于触发重新布局
-  onInput?: (text: Text) => void
+  onInput?: (text: EditableText) => void
   // 覆盖层挂载完成回调，供外部直接监听编辑框事件（如 Tab/Enter 新建节点）
-  onEditStart?: (el: HTMLDivElement, text: Text) => void
+  onEditStart?: (el: HTMLDivElement, text: EditableText) => void
   // 编辑结束回调（失焦切回隐藏态或覆盖层被移除），供外部恢复键盘捕获焦点等
   onEditEnd?: () => void
   // 点击文本节点回调（仅通知激活，覆盖层由外部通过 start 主动挂载）
-  onActivate?: (text: Text) => void
+  onActivate?: (text: EditableText) => void
   // 可编辑判定：install 与 add 包装时决定哪些节点自动绑定点击激活（dispose 按同一
   // 判定解绑）。默认绑定 Text 节点；宿主可注入自定义判定（如排除锁定节点、支持
   // 自定义可编辑节点子类），插件不硬编码节点类型决策
@@ -43,10 +43,10 @@ export class TextEditor implements Plugin, TextEditorCapability {
   private disposed = false
 
   // 编辑会话回调（公开可写）：消费方可在 install 后按需赋值
-  onInput: ((text: Text) => void) | undefined
-  onEditStart: ((el: HTMLDivElement, text: Text) => void) | undefined
+  onInput: ((text: EditableText) => void) | undefined
+  onEditStart: ((el: HTMLDivElement, text: EditableText) => void) | undefined
   onEditEnd: (() => void) | undefined
-  onActivate: ((text: Text) => void) | undefined
+  onActivate: ((text: EditableText) => void) | undefined
   // 策略注入（公开可写）：可编辑判定与粘贴放行判定，见 TextEditorOptions 注释
   canEdit: ((node: Node) => boolean) | undefined
   shouldReleasePaste: ((e: ClipboardEvent) => boolean) | undefined
@@ -97,10 +97,11 @@ export class TextEditor implements Plugin, TextEditorCapability {
     this.el = null
     this.text = null
     el?.remove()
-    // 解绑已绑定节点的点击回调（与绑定同一判定）
+    // 解绑已绑定节点的点击回调（与绑定同一判定，经点击分发能力取消注册）
     if (this.app) {
+      const click = this.app.capability(CANVAS_CLICK_CAPABILITY)
       const unbind = (node: Node) => {
-        if (this.isEditable(node)) node.onClick = null
+        if (this.isEditable(node)) click?.onNodeClick(node, null)
         node.children.forEach(unbind)
       }
       this.app.children.forEach(unbind)
@@ -207,12 +208,17 @@ export class TextEditor implements Plugin, TextEditorCapability {
 
   // ───────────────────────── 私有实现 ─────────────────────────
 
-  // 递归为节点树中的可编辑节点绑定点击事件（仅通知激活，不直接挂载覆盖层）
+  // 递归为节点树中的可编辑节点绑定点击事件（仅通知激活，不直接挂载覆盖层）。
+  // 点击激活委托给点击分发能力（CanvasClickCapability.onNodeClick）：绑定/解绑
+  // 生命周期收口在分发方注册表，模型层不携带回调字段。分发能力未装配时降级为
+  // 不绑定（无点击分发即无激活路径）
   private bindText(node: Node) {
     if (this.isEditable(node)) {
-      // 判定命中即视为可编辑文本节点（回调契约以 Text 为载荷）
+      // 判定命中即视为可编辑文本节点（回调契约以 EditableText 为载荷）
       const editable = node as Text
-      node.onClick = () => this.onActivate?.(editable)
+      this.app
+        ?.capability(CANVAS_CLICK_CAPABILITY)
+        ?.onNodeClick(node, () => this.onActivate?.(editable))
     }
     node.children.forEach(child => this.bindText(child))
   }

@@ -24,9 +24,9 @@ export class Renderer {
   width = 0
   height = 0
 
-  // 天空层画布（可选，App 创建注入）：覆盖层绘制在独立透明画布上，覆盖层-only
-  // 路径（renderSky）只重绘该层，场景画布（树层）与快照完全不动；为 null 时
-  // 覆盖层退化为画在主画布上
+  // 天空层画布（可选，mountSky 创建；测试可注入桩）：覆盖层绘制在独立透明画布上，
+  // 覆盖层-only 路径（renderSky）只重绘该层，场景画布（树层）与快照完全不动；为 null 时
+  // 覆盖层退化为画在主画布上。DOM 创建、几何对齐、上下文与绘制全部收口在本类
   sky: HTMLCanvasElement | null = null
   private skyCtx: CanvasRenderingContext2D | null = null
 
@@ -58,6 +58,8 @@ export class Renderer {
 
   // 同步画布物理尺寸到当前 CSS 尺寸（窗口/容器尺寸变化后调用，否则内容被拉伸模糊）
   resize() {
+    // 天空层 CSS 几何对齐先行：物理尺寸按对齐后的 CSS 尺寸计算
+    this.syncSkyGeometry()
     const dpr = window.devicePixelRatio || 1
     const rect = this.canvas.getBoundingClientRect()
     this.width = this.canvas.width = Math.round(rect.width * dpr)
@@ -73,6 +75,43 @@ export class Renderer {
     } else {
       this.skyCtx = null
     }
+  }
+
+  // 挂载天空层：创建叠放于主画布之上的独立透明画布（DOM 次序在主画布之后、
+  // pointer-events: none 不拦截命中/手势）并做初始几何对齐。天空层的 DOM 创建、
+  // 几何对齐、上下文与绘制全部收口在本类，App 构造期调用一次即可；不可用
+  // （无 document / 无父容器 / 异常）时保持 null，覆盖层退化为画在主画布上
+  mountSky() {
+    try {
+      if (typeof document === 'undefined') return
+      const parent = this.canvas.parentElement
+      if (!parent || typeof parent.appendChild !== 'function') return
+      const sky = document.createElement('canvas')
+      if (typeof getComputedStyle === 'function' && getComputedStyle(parent).position === 'static') {
+        parent.style.position = 'relative'
+      }
+      sky.style.position = 'absolute'
+      sky.style.pointerEvents = 'none'
+      parent.appendChild(sky)
+      this.sky = sky
+      this.syncSkyGeometry()
+    } catch {
+      this.sky = null
+      this.skyCtx = null
+    }
+  }
+
+  // 天空层与主画布几何对齐（CSS 位置/尺寸；物理尺寸与 dpr 基准变换由 resize 统一
+  // 处理）。容器尺寸变化经 resize 到达，覆盖层跟随画布增缩不"漂"位
+  private syncSkyGeometry() {
+    const sky = this.sky
+    // 测试桩可能未提供 style，跳过 CSS 对齐（物理同步不受影响）
+    if (!sky || !sky.style) return
+    sky.style.left = `${this.canvas.offsetLeft}px`
+    sky.style.top = `${this.canvas.offsetTop}px`
+    const rect = this.canvas.getBoundingClientRect()
+    sky.style.width = `${rect.width}px`
+    sky.style.height = `${rect.height}px`
   }
 
   // 全量渲染：场景光栅化进离屏快照（含 overscan，不含覆盖层）并记录基准，

@@ -75,20 +75,33 @@ describe("Clicker", () => {
     expect(app.capability(CANVAS_CLICK_CAPABILITY)).toBe(clicker);
   });
 
-  it("点击命中节点：倒序取最上层触发 onClick 并传入 app", () => {
-    const { app, canvas } = setup();
+  it("点击命中节点：倒序取最上层触发注册回调并传入命中节点", () => {
+    const { app, canvas, clicker } = setup();
     const a = new TestNode({ x: 0, y: 0, width: 50, height: 50 });
     const b = new TestNode({ x: 0, y: 0, width: 50, height: 50 }); // 与 A 重叠，且后加入（更上层）
     const onA = vi.fn();
     const onB = vi.fn();
-    a.onClick = onA;
-    b.onClick = (passed) => onB(passed);
+    clicker.onNodeClick(a, onA);
+    clicker.onNodeClick(b, onB);
     app.add([a, b]);
 
     canvas.dispatch("mousedown", { clientX: 10, clientY: 10 });
     canvas.dispatch("click", { clientX: 10, clientY: 10 });
-    expect(onB).toHaveBeenCalledWith(app);
+    expect(onB).toHaveBeenCalledWith(b);
     expect(onA).not.toHaveBeenCalled();
+  });
+
+  it("onNodeClick(null) 取消节点点击回调", () => {
+    const { app, canvas, clicker } = setup();
+    const node = new TestNode({ x: 0, y: 0, width: 50, height: 50 });
+    const handler = vi.fn();
+    clicker.onNodeClick(node, handler);
+    clicker.onNodeClick(node, null);
+    app.add(node);
+
+    canvas.dispatch("mousedown", { clientX: 10, clientY: 10 });
+    canvas.dispatch("click", { clientX: 10, clientY: 10 });
+    expect(handler).not.toHaveBeenCalled();
   });
 
   it("未命中任何节点触发空白点击回调", () => {
@@ -108,7 +121,7 @@ describe("Clicker", () => {
     const blank = vi.fn();
     clicker.onBlankClick(blank);
     const node = new TestNode({ x: 0, y: 0, width: 50, height: 50 });
-    node.onClick = onClick;
+    clicker.onNodeClick(node, onClick);
     app.add(node);
 
     canvas.dispatch("mousedown", { clientX: 0, clientY: 0 });

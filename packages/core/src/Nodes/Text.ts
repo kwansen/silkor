@@ -1,5 +1,16 @@
 import { Node, type NodeOptions } from '../Node'
 
+// ── 已知耦合点（刻意保留，勿"解耦"）────────────────────────────────
+// 本类与文本编辑插件（plugin-text-editor）存在双向特化：
+// 1. 测量/渲染 → 编辑覆盖层：本类用隐藏 DOM 元素测量断行，并刻意采用与编辑覆盖层
+//    （contenteditable）相同的排版参数（overflow-wrap、基线公式等），保证 canvas
+//    文字与覆盖层文字逐像素一致——这是文本编辑体验的硬性前提，收窄该耦合会破坏
+//    对齐不变量。任何影响断行/基线的改动必须两侧同步验证。
+// 2. 编辑覆盖层 → 本类：编辑插件读写 textHidden（接管文字渲染）并按本类字段定位
+//    覆盖层。能力契约（TextEditorCapability）已收窄为 EditableText 最小结构，
+//    具体类型依赖收敛在编辑插件与本类之间。
+// ─────────────────────────────────────────────────────────────────────
+
 type Padding = number | [number] | [number, number] | [number, number, number] | [number, number, number, number]
 
 interface BoxStyle {

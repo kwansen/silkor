@@ -30,10 +30,10 @@ export class App {
     // 执行感知为零）；执行时取最新节点列表与相机状态重光栅化并复位快照基准
     this.renderer.onRebaseNeeded = () => this.requestRebaseRender()
     // 天空层（sky）：交互覆盖层（高亮环/选框/虚影等）绘制在叠放于场景画布之上的
-    // 独立透明画布，覆盖层变更只重绘该层，场景画布（树层）完全不动；
-    // ground 背景层为后续预留位。无父容器（测试/离屏）时退化为无天空层
-    this.renderer.sky = this.createSkyCanvas(canvas)
-    this.syncSky()
+    // 独立透明画布，覆盖层变更只重绘该层，场景画布（树层）完全不动。
+    // DOM 创建与几何对齐收口在 Renderer（mountSky），App 只触发挂载；
+    // 无父容器（测试/离屏）时退化为无天空层
+    this.renderer.mountSky()
     // 容器尺寸变化：同步画布物理尺寸并重绘（ResizeObserver 首次观察也触发一次，等价重绘无副作用）；
     // 尺寸变化时补偿视口偏移，使视口中心对应的世界点保持居中——宿主 UI 开合（如 AI
     // 侧边栏）或窗口缩放后，正在查看/编辑的节点不会因画布增缩而"漂"出原位置
@@ -54,43 +54,11 @@ export class App {
       }
       this.lastW = rect.width
       this.lastH = rect.height
-      this.syncSky()
       this.renderer.resize()
       this.render()
     }).observe(canvas)
     // 画布点击分发（拖拽阈值判定/命中测试/空白点击）由 plugin-interaction 的
     // Clicker 插件承担：core 只保留渲染与能力机制
-  }
-
-  // 创建天空层画布：叠放于场景画布之上（DOM 次序在其后），不接收指针事件
-  // （命中/手势仍落在场景画布上）
-  private createSkyCanvas(canvas: HTMLCanvasElement): HTMLCanvasElement | null {
-    try {
-      if (typeof document === 'undefined') return null
-      const parent = canvas.parentElement
-      if (!parent || typeof parent.appendChild !== 'function') return null
-      const sky = document.createElement('canvas')
-      if (typeof getComputedStyle === 'function' && getComputedStyle(parent).position === 'static') {
-        parent.style.position = 'relative'
-      }
-      sky.style.position = 'absolute'
-      sky.style.pointerEvents = 'none'
-      parent.appendChild(sky)
-      return sky
-    } catch {
-      return null
-    }
-  }
-
-  // 天空层与场景画布几何对齐（位置/尺寸随容器变化，ResizeObserver 回调同步）
-  private syncSky() {
-    const sky = this.renderer.sky
-    if (!sky) return
-    sky.style.left = `${this.canvas.offsetLeft}px`
-    sky.style.top = `${this.canvas.offsetTop}px`
-    const rect = this.canvas.getBoundingClientRect()
-    sky.style.width = `${rect.width}px`
-    sky.style.height = `${rect.height}px`
   }
 
   add(nodes: Node | Node[]) {

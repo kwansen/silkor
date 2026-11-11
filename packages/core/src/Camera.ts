@@ -1,6 +1,7 @@
 // 相机（视口状态唯一属主）：平移量、缩放比例与视口变化通知。
 // 独立于 Renderer——渲染后端可替换，相机语义不随之迁移；坐标换算的唯一实现在此，
 // App、插件与场景统一经相机做屏幕/世界坐标转换（画布在页面中的偏移由相机自行读取）。
+import type { Bounds } from './Node'
 
 // 视口变换状态：画布整体平移量与缩放比例
 export interface CameraState {
@@ -68,5 +69,32 @@ export class Camera {
       y: rect.height / 2 - y * this.scale,
       scale: this.scale,
     })
+  }
+
+  // 平移视口把世界坐标包围盒带入可视区（保持缩放不变）：越界才做最小平移，
+  // 已可见时不动。返回是否发生了平移（未平移时调用方可跳过后续渲染）。
+  // 边界取画布尺寸而非 window 尺寸：宿主布局（如并列侧边栏）会压缩画布，
+  // 按 window 判断会把节点平移到画布外被裁剪的假视口位置。
+  // 只改相机状态不触发渲染：调用方按自身场景选择轻量相机渲染或全量渲染
+  scrollIntoView(bounds: Bounds, padding = 20): boolean {
+    const rect = this.canvas.getBoundingClientRect()
+    const sx = bounds.minX * this.scale + this.x
+    const sy = bounds.minY * this.scale + this.y
+    const right = bounds.maxX * this.scale + this.x
+    const bottom = bounds.maxY * this.scale + this.y
+    // 水平：左边界越出左侧则右移，右边界越出右侧则左移；垂直对称
+    const dx = sx < padding
+      ? padding - sx
+      : right > rect.width - padding
+        ? rect.width - padding - right
+        : 0
+    const dy = sy < padding
+      ? padding - sy
+      : bottom > rect.height - padding
+        ? rect.height - padding - bottom
+        : 0
+    if (dx === 0 && dy === 0) return false
+    this.setViewport({ x: this.x + dx, y: this.y + dy, scale: this.scale })
+    return true
   }
 }

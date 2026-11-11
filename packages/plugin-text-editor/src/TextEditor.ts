@@ -126,9 +126,9 @@ export class TextEditor implements Plugin, TextEditorCapability {
     this.hidden = true
     this.syncPosition(app)
     // 不触发渲染：隐藏覆盖层模式视觉与未挂载完全一致（文字仍由 canvas 绘制），
-    // 挂载本身无任何画布变化；此前在此同步全量渲染是点击激活卡顿的根因之一
+    // 挂载本身无任何画布变化；此前在此同步全量渲染是点击激活卡顿的根因之一。
+    // 是否平移视口让节点可见属调用方策略，插件不做
     el.focus()
-    this.panIntoView(app, text)
     // 通知外部覆盖层已就绪，可自行绑定按键等事件
     this.onEditStart?.(el, text)
   }
@@ -240,9 +240,7 @@ export class TextEditor implements Plugin, TextEditorCapability {
       // beforeinput（拦截后异步 execCommand 会打断输入法组合，吞掉首键）
       text.text = this.readText(el)
       app.render()
-      this.panIntoView(app, text)
-      this.syncPosition(app)
-      // 通知外部输入事件，触发重新布局等联动
+      // 通知外部输入事件，触发重新布局、视口跟随等联动
       this.onInput?.(text)
     })
     el.addEventListener('blur', () => {
@@ -373,34 +371,5 @@ export class TextEditor implements Plugin, TextEditorCapability {
     // 编辑框跟随视口缩放，保证覆盖对齐
     el.style.transformOrigin = '0 0'
     el.style.transform = `scale(${vp.scale})`
-  }
-
-  // 文本节点越出视口时平移视口，保证文本与编辑框可见（按画布本地屏幕坐标判断）。
-  // 边界取画布尺寸而非 window 尺寸：宿主布局（如 AI 侧边栏并列面板）会压缩画布，
-  // sx/sy 为画布本地坐标，对 window 判断会把节点平移到画布外被裁剪的假视口位置
-  private panIntoView(app: App, text: Text) {
-    const el = this.el
-    if (!el) return
-    const vp = app.camera.viewport
-    const point = text.getWorldPoint()
-    // 世界坐标换算成画布本地屏幕坐标
-    const sx = point.x * vp.scale + vp.x
-    const sy = point.y * vp.scale + vp.y
-    const right = sx + text.width * vp.scale
-    const bottom = sy + text.height * vp.scale
-    const w = app.canvas.clientWidth
-    const h = app.canvas.clientHeight
-    // 水平：左边界越出左侧则右移，右边界越出右侧则左移
-    const dx = sx < 20
-      ? 20 - sx
-      : right > w - 20
-        ? w - 20 - right
-        : 0
-    // 垂直：超出下边界则上移
-    const dy = bottom > h - 20 ? h - 20 - bottom : 0
-    if (dx === 0 && dy === 0) return
-    // 平移视口而非节点坐标，保持布局数据不变并触发编辑框对齐
-    app.camera.setViewport({ ...vp, x: vp.x + dx, y: vp.y + dy })
-    app.render()
   }
 }

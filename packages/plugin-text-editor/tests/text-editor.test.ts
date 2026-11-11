@@ -117,6 +117,36 @@ describe("TextEditor 装配", () => {
   });
 });
 
+describe("TextEditor 可编辑判定注入", () => {
+  it("canEdit 覆盖默认判定：命中的非 Text 节点被绑定，未命中的 Text 不绑定", () => {
+    const app = new App(createStubCanvas());
+    const plain = new TestNode();
+    const text = makeText("a");
+    const editor = new TextEditor({ canEdit: (n) => n === plain });
+    app.use(editor);
+    app.add(plain);
+    app.add(text);
+
+    expect(plain.onClick).not.toBeNull();
+    expect(text.onClick).toBeNull();
+  });
+
+  it("dispose 按注入判定解绑（默认判定节点不受影响）", () => {
+    const app = new App(createStubCanvas());
+    const plain = new TestNode();
+    const text = makeText("b");
+    const editor = new TextEditor({ canEdit: (n) => n === plain });
+    app.use(editor);
+    app.add(plain);
+    app.add(text);
+
+    editor.dispose();
+    expect(plain.onClick).toBeNull();
+    // 未命中判定的 Text 从未被绑定，onClick 保持为空
+    expect(text.onClick).toBeNull();
+  });
+});
+
 describe("TextEditor 卸载还原", () => {
   it("dispose 解绑全部已绑定文本节点的点击并还原 add 包装", () => {
     const app = new App(createStubCanvas());

@@ -1,4 +1,4 @@
-﻿﻿import { SILKER_CLIPBOARD_MIME, Text } from '@silker/core'
+﻿﻿﻿﻿import { SILKER_CLIPBOARD_MIME, Text } from '@silker/core'
 import type { App, Node, Plugin } from '@silker/core'
 import { TEXT_EDITOR_CAPABILITY } from '@silker/core'
 import type { TextEditorCapability } from '@silker/core'
@@ -16,6 +16,14 @@ export interface TextEditorOptions {
   onEditEnd?: () => void
   // 点击文本节点回调（仅通知激活，覆盖层由外部通过 start 主动挂载）
   onActivate?: (text: Text) => void
+  // 可编辑判定：install 与 add 包装时决定哪些节点自动绑定点击激活（dispose 按同一
+  // 判定解绑）。默认绑定 Text 节点；宿主可注入自定义判定（如排除锁定节点、支持
+  // 自定义可编辑节点子类），插件不硬编码节点类型决策
+  canEdit?: (node: Node) => boolean
+  // 粘贴放行判定：返回 true 表示该粘贴事件不归本插件消费，放行给 document 级
+  // 处理器（如 Clipboard 插件的节点分发）。默认判定剪贴板是否携带 silker 节点
+  // 载荷；宿主采用其他剪贴板协议时可注入自定义判定，插件不感知具体载荷协议
+  shouldReleasePaste?: (e: ClipboardEvent) => boolean
 }
 
 // 文本编辑插件：在文本节点上挂载可编辑覆盖层，输入实时同步。
@@ -39,12 +47,17 @@ export class TextEditor implements Plugin, TextEditorCapability {
   onEditStart: ((el: HTMLDivElement, text: Text) => void) | undefined
   onEditEnd: (() => void) | undefined
   onActivate: ((text: Text) => void) | undefined
+  // 策略注入（公开可写）：可编辑判定与粘贴放行判定，见 TextEditorOptions 注释
+  canEdit: ((node: Node) => boolean) | undefined
+  shouldReleasePaste: ((e: ClipboardEvent) => boolean) | undefined
 
   constructor(options: TextEditorOptions = {}) {
     this.onInput = options.onInput
     this.onEditStart = options.onEditStart
     this.onEditEnd = options.onEditEnd
     this.onActivate = options.onActivate
+    this.canEdit = options.canEdit
+    this.shouldReleasePaste = options.shouldReleasePaste
   }
 
   // ───────────────────────── 生命周期 ─────────────────────────
@@ -84,10 +97,10 @@ export class TextEditor implements Plugin, TextEditorCapability {
     this.el = null
     this.text = null
     el?.remove()
-    // 解绑已绑定节点的点击回调
+    // 解绑已绑定节点的点击回调（与绑定同一判定）
     if (this.app) {
       const unbind = (node: Node) => {
-        if (node instanceof Text) node.onClick = null
+        if (this.isEditable(node)) node.onClick = null
         node.children.forEach(unbind)
       }
       this.app.children.forEach(unbind)
@@ -194,12 +207,34 @@ export class TextEditor implements Plugin, TextEditorCapability {
 
   // ───────────────────────── 私有实现 ─────────────────────────
 
-  // 递归为节点树中的文本节点绑定点击事件（仅通知激活，不直接挂载覆盖层）
+  // 递归为节点树中的可编辑节点绑定点击事件（仅通知激活，不直接挂载覆盖层）
   private bindText(node: Node) {
-    if (node instanceof Text) {
-      node.onClick = () => this.onActivate?.(node)
+    if (this.isEditable(node)) {
+      // 判定命中即视为可编辑文本节点（回调契约以 Text 为载荷）
+      const editable = node as Text
+      node.onClick = () => this.onActivate?.(editable)
     }
     node.children.forEach(child => this.bindText(child))
+  }
+
+  // 可编辑判定：未注入 canEdit 时默认绑定 Text 节点（保持既有行为）
+  private isEditable(node: Node): boolean {
+    return this.canEdit ? this.canEdit(node) : node instanceof Text
+  }
+
+  // 粘贴放行判定：未注入 shouldReleasePaste 时用默认判定（silker 节点载荷协议）
+  private releasePaste(e: ClipboardEvent): boolean {
+    return this.shouldReleasePaste
+      ? this.shouldReleasePaste(e)
+      : this.isSilkerPayload(e)
+  }
+
+  // 默认粘贴放行判定：剪贴板携带 silker 节点载荷（自定义 MIME 或
+  // text/html data-silker 信封）时放行，交由 document 级 Clipboard 插件分发
+  private isSilkerPayload(e: ClipboardEvent): boolean {
+    const cd = e.clipboardData
+    const html = cd?.getData('text/html') ?? ''
+    return !!cd?.types.includes(SILKER_CLIPBOARD_MIME) || html.includes('data-silker')
   }
 
   // 绑定输入与失焦事件：输入同步文本并重渲染
@@ -211,12 +246,10 @@ export class TextEditor implements Plugin, TextEditorCapability {
     // 样式，插入的纯文本自然继承节点样式。用 execCommand 而非手工操作 Range，以保留
     // 浏览器原生撤销栈；粘贴不发生在 IME 组合窗口内，同步 execCommand 不会打断组合
     el.addEventListener('paste', e => {
-      // 剪贴板携带 silker 节点载荷（自定义 MIME 或 text/html data-silker 信封）：
-      // 不在此插文字，让 document 级 Clipboard 插件分发粘贴节点——元素级监听先于
-      // document 触发，此处若 preventDefault 会与节点粘贴双重执行（节点+文字）
-      const cd = e.clipboardData
-      const html = cd?.getData('text/html') ?? ''
-      if (cd?.types.includes(SILKER_CLIPBOARD_MIME) || html.includes('data-silker')) return
+      // 粘贴放行判定（默认：剪贴板携带 silker 节点载荷）命中时不在此插文字，让
+      // document 级 Clipboard 插件分发粘贴节点——元素级监听先于 document 触发，
+      // 此处若 preventDefault 会与节点粘贴双重执行（节点+文字）
+      if (this.releasePaste(e)) return
       // 隐藏态（激活态）覆盖层不消费粘贴：激活态聚焦的是常驻覆盖层，paste 会打到
       // 这里——若插文字会唤醒编辑态并替换节点文本。放行给 document 级 Clipboard
       // 插件分发（纯文本 → pasteText 建子节点；节点载荷 → 粘贴节点树）

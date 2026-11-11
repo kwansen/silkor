@@ -1,5 +1,7 @@
-// 剪贴板插件回归测试：copy/paste 事件分发、MIME/信封解析、可编辑元素放行、
-// 外部纯文本兜底、register 注销与 write/read 程序化路径
+// 剪贴板插件回归测试：copy/paste 事件分发、决策委托（onCopy/onPasteText）、
+// MIME/信封解析、输入框放行、register 注销与 write/read 程序化路径。
+// 注意：编辑态选区语义与文本形状判定均属场景策略，插件测试不再覆盖——机制层
+// 只按决策结果分发
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   App,
@@ -7,6 +9,8 @@ import {
   SILKER_CLIPBOARD_MIME,
   type ClipboardConsumer,
   type ClipboardEntry,
+  type CopyDecision,
+  type PasteTextDecision,
 } from "@silker/core";
 import { Clipboard } from "../src/Clipboard";
 
@@ -68,18 +72,26 @@ function fakeEvent(opts: {
   } as unknown as ClipboardEvent & { defaultPrevented: boolean };
 }
 
-// 记录型 consumer：serialize 返回预置载荷，deserialize/pasteText 记录调用
+// 记录型 consumer：onCopy 返回预置载荷，deserialize/onPasteText 记录调用
 function fakeConsumer(kind: string, entry: ClipboardEntry | null = null) {
-  const calls: { deserialize?: ClipboardEntry; pasteText?: string } = {};
+  const calls: {
+    deserialize?: ClipboardEntry;
+    pasteText?: string;
+    copyContext?: unknown;
+  } = {};
   const consumer: ClipboardConsumer & { calls: typeof calls } = {
     kind,
     calls,
-    serialize: () => entry,
+    onCopy: (ctx) => {
+      calls.copyContext = ctx;
+      return entry;
+    },
     deserialize: (e) => {
       calls.deserialize = e;
     },
-    pasteText: (t) => {
-      calls.pasteText = t;
+    onPasteText: ({ text }) => {
+      calls.pasteText = text;
+      return "handled" as PasteTextDecision;
     },
   };
   return consumer;
@@ -116,21 +128,84 @@ describe("Clipboard 插件", () => {
     expect(doc.count("paste")).toBe(0);
   });
 
-  it("copy：serialize 非空载荷时写入三通道——MIME / 可读 text/plain / text/html 信封", () => {
+  it("copy：onCopy 返回载荷时写入三通道——MIME / 可读 text/plain / text/html 信封（可见部分用场景 html）", () => {
     const { clipboard } = setup();
-    const entry: ClipboardEntry = { kind: "test", payload: { v: 1 }, text: "你好\t子" };
-    const consumer = fakeConsumer("test", entry);
-    clipboard.register(consumer);
+    const entry: ClipboardEntry = {
+      kind: "test",
+      payload: { v: 1 },
+      text: "你好\t子",
+      html: "<ul><li>你好</li></ul>",
+    };
+    clipboard.register(fakeConsumer("test", entry));
     const e = fakeEvent({});
     doc.dispatch("copy", e as unknown as Record<string, unknown>);
     expect(e.defaultPrevented).toBe(true);
     expect(e.clipboardData!.getData(SILKER_CLIPBOARD_MIME)).toBe(JSON.stringify(entry));
-    // text/plain 是人类可读 tab 文本（供飞书等外部应用粘贴层级）
+    // text/plain 是可读兜底文本
     expect(e.clipboardData!.getData("text/plain")).toBe("你好\t子");
-    // text/html 信封：可见文本 + data-silker 属性承载结构化载荷
+    // text/html 信封：场景自渲染的可见内容 + data-silker 属性承载结构化载荷
     const html = e.clipboardData!.getData("text/html");
-    expect(html).toContain("你好\t子");
+    expect(html).toContain("<ul><li>你好</li></ul>");
     expect(html).toContain("data-silker=");
+  });
+
+  it("copy：载荷无 html 时信封可见部分为空（机制层不渲染场景内容），仅 data-silker 承载载荷", () => {
+    const { clipboard } = setup();
+    const entry: ClipboardEntry = { kind: "test", payload: 1, text: "文本" };
+    clipboard.register(fakeConsumer("test", entry));
+    const e = fakeEvent({});
+    doc.dispatch("copy", e as unknown as Record<string, unknown>);
+    const html = e.clipboardData!.getData("text/html");
+    expect(html).toContain("data-silker=");
+    expect(html).not.toContain("<li>");
+  });
+
+  it("copy：onCopy 返回 native 时放行原生复制", () => {
+    const { clipboard } = setup();
+    const consumer = fakeConsumer("test");
+    consumer.onCopy = () => "native" as CopyDecision;
+    clipboard.register(consumer);
+    const e = fakeEvent({});
+    doc.dispatch("copy", e as unknown as Record<string, unknown>);
+    expect(e.defaultPrevented).toBe(false);
+    expect(e.clipboardData!.getData(SILKER_CLIPBOARD_MIME)).toBe("");
+  });
+
+  it("copy：onCopy 返回 null 不参与，继续询问下一个 consumer（按注册序首个决策生效）", () => {
+    const { clipboard } = setup();
+    const first = fakeConsumer("a");
+    first.onCopy = () => null;
+    const second = fakeConsumer("b", { kind: "b", payload: 2 });
+    clipboard.register(first);
+    clipboard.register(second);
+    const e = fakeEvent({});
+    doc.dispatch("copy", e as unknown as Record<string, unknown>);
+    expect(e.defaultPrevented).toBe(true);
+    expect(e.clipboardData!.getData(SILKER_CLIPBOARD_MIME)).toBe(
+      JSON.stringify({ kind: "b", payload: 2 }),
+    );
+  });
+
+  it("copy：决策上下文携带事件 target，供场景判定编辑态语义", () => {
+    const { clipboard } = setup();
+    const consumer = fakeConsumer("test");
+    clipboard.register(consumer);
+    const target = { tagName: "DIV", isContentEditable: true };
+    const e = fakeEvent({ target });
+    doc.dispatch("copy", e as unknown as Record<string, unknown>);
+    expect(consumer.calls.copyContext).toEqual({ target });
+  });
+
+  it("copy：真实输入框内放行原生行为", () => {
+    const { clipboard } = setup();
+    const consumer = fakeConsumer("test", { kind: "test", payload: 1 });
+    clipboard.register(consumer);
+    for (const target of [{ tagName: "INPUT" }, { tagName: "TEXTAREA" }]) {
+      const e = fakeEvent({ target });
+      doc.dispatch("copy", e as unknown as Record<string, unknown>);
+      expect(e.defaultPrevented).toBe(false);
+      expect(consumer.calls.copyContext).toBeUndefined();
+    }
   });
 
   it("paste：text/html 的 data-silker 信封还原节点（Chrome 主通道）", () => {
@@ -146,59 +221,6 @@ describe("Clipboard 插件", () => {
     doc.dispatch("paste", e as unknown as Record<string, unknown>);
     expect(e.defaultPrevented).toBe(true);
     expect(consumer.calls.deserialize).toEqual(entry);
-  });
-
-  it("copy：全部 consumer serialize 为空时不拦截，放行原生行为", () => {
-    const { clipboard } = setup();
-    clipboard.register(fakeConsumer("test", null));
-    const e = fakeEvent({});
-    doc.dispatch("copy", e as unknown as Record<string, unknown>);
-    expect(e.defaultPrevented).toBe(false);
-    expect(e.clipboardData!.getData(SILKER_CLIPBOARD_MIME)).toBe("");
-  });
-
-  it("copy：真实输入框内放行原生行为", () => {
-    const { clipboard } = setup();
-    const consumer = fakeConsumer("test", { kind: "test", payload: 1 });
-    clipboard.register(consumer);
-    for (const target of [{ tagName: "INPUT" }, { tagName: "TEXTAREA" }]) {
-      const e = fakeEvent({ target });
-      doc.dispatch("copy", e as unknown as Record<string, unknown>);
-      expect(e.defaultPrevented).toBe(false);
-      expect(consumer.calls.deserialize).toBeUndefined();
-    }
-  });
-
-  it("copy：覆盖层激活态/编辑态光标折叠走节点复制，编辑态有文字选区放行原生", () => {
-    const { clipboard } = setup();
-    let editing = false;
-    clipboard.register({
-      kind: "test",
-      serialize: () => ({ kind: "test", payload: 1 }),
-      deserialize: () => {},
-      isEditing: () => editing,
-    });
-    const overlay = { tagName: "DIV", isContentEditable: true, contains: () => true };
-    // 激活态覆盖层：拦截并序列化节点
-    const e1 = fakeEvent({ target: overlay });
-    doc.dispatch("copy", e1 as unknown as Record<string, unknown>);
-    expect(e1.defaultPrevented).toBe(true);
-    // 编辑态光标折叠（未选中文字）：复制节点
-    editing = true;
-    const e2 = fakeEvent({ target: overlay });
-    doc.dispatch("copy", e2 as unknown as Record<string, unknown>);
-    expect(e2.defaultPrevented).toBe(true);
-    // 编辑态有文字选区：放行原生复制文字
-    vi.stubGlobal(
-      "window",
-      Object.assign(new FakeTarget(), {
-        devicePixelRatio: 1,
-        getSelection: () => ({ isCollapsed: false, anchorNode: overlay }),
-      }),
-    );
-    const e3 = fakeEvent({ target: overlay });
-    doc.dispatch("copy", e3 as unknown as Record<string, unknown>);
-    expect(e3.defaultPrevented).toBe(false);
   });
 
   it("paste：MIME 载荷按 kind 匹配 consumer 还原", () => {
@@ -223,7 +245,19 @@ describe("Clipboard 插件", () => {
     expect(consumer.calls.deserialize).toEqual(entry);
   });
 
-  it("paste：无 silker 载荷的纯文本交给 pasteText 兜底（外部文本）", () => {
+  it("paste：silker 载荷分发优先于 onPasteText（复制节点后进编辑态粘贴仍得节点）", () => {
+    const { clipboard } = setup();
+    const consumer = fakeConsumer("test");
+    clipboard.register(consumer);
+    const entry: ClipboardEntry = { kind: "test", payload: { v: 1 }, text: "hello" };
+    const e = fakeEvent({ mime: JSON.stringify(entry), text: "hello" });
+    doc.dispatch("paste", e as unknown as Record<string, unknown>);
+    expect(e.defaultPrevented).toBe(true);
+    expect(consumer.calls.deserialize).toEqual(entry);
+    expect(consumer.calls.pasteText).toBeUndefined();
+  });
+
+  it("paste：无 silker 载荷的纯文本交 onPasteText 决策（handled 拦截）", () => {
     const { clipboard } = setup();
     const consumer = fakeConsumer("test");
     clipboard.register(consumer);
@@ -231,17 +265,46 @@ describe("Clipboard 插件", () => {
     doc.dispatch("paste", e as unknown as Record<string, unknown>);
     expect(e.defaultPrevented).toBe(true);
     expect(consumer.calls.pasteText).toBe("外部文本");
+    expect(consumer.calls.deserialize).toBeUndefined();
   });
 
-  it("paste：无 pasteText 的 consumer 不参与文本兜底且不拦截", () => {
+  it("paste：onPasteText 返回 native 时不拦截（编辑态纯文字贴光标由场景声明）", () => {
     const { clipboard } = setup();
-    clipboard.register({ kind: "test", serialize: () => null, deserialize: () => {} });
+    const consumer = fakeConsumer("test");
+    consumer.onPasteText = ({ text }) => {
+      consumer.calls.pasteText = text;
+      return "native";
+    };
+    clipboard.register(consumer);
+    const e = fakeEvent({ text: "hello" });
+    doc.dispatch("paste", e as unknown as Record<string, unknown>);
+    expect(e.defaultPrevented).toBe(false);
+    expect(consumer.calls.pasteText).toBe("hello");
+  });
+
+  it("paste：onPasteText 返回 null 不参与，继续询问下一个 consumer", () => {
+    const { clipboard } = setup();
+    const first = fakeConsumer("a");
+    first.onPasteText = () => null;
+    const second = fakeConsumer("b");
+    clipboard.register(first);
+    clipboard.register(second);
+    const e = fakeEvent({ text: "外部文本" });
+    doc.dispatch("paste", e as unknown as Record<string, unknown>);
+    expect(e.defaultPrevented).toBe(true);
+    expect(second.calls.pasteText).toBe("外部文本");
+    expect(first.calls.pasteText).toBeUndefined();
+  });
+
+  it("paste：无 onPasteText 的 consumer 不参与文本分发且不拦截", () => {
+    const { clipboard } = setup();
+    clipboard.register({ kind: "test", onCopy: () => null, deserialize: () => {} });
     const e = fakeEvent({ text: "外部文本" });
     doc.dispatch("paste", e as unknown as Record<string, unknown>);
     expect(e.defaultPrevented).toBe(false);
   });
 
-  it("paste：kind 无匹配 consumer 时降级为文本兜底", () => {
+  it("paste：kind 无匹配 consumer 时载荷降级为文本分发（onPasteText 拿到可读文本）", () => {
     const { clipboard } = setup();
     const consumer = fakeConsumer("test");
     clipboard.register(consumer);
@@ -253,29 +316,14 @@ describe("Clipboard 插件", () => {
     expect(consumer.calls.pasteText).toBe("可读文本");
   });
 
-  it("paste：可编辑元素内放行原生粘贴", () => {
+  it("paste：真实输入框内放行原生粘贴（不参与分发）", () => {
     const { clipboard } = setup();
     const consumer = fakeConsumer("test");
     clipboard.register(consumer);
     const e = fakeEvent({ text: "文本", target: { tagName: "INPUT" } });
     doc.dispatch("paste", e as unknown as Record<string, unknown>);
     expect(e.defaultPrevented).toBe(false);
-  });
-
-  it("paste：编辑态覆盖层遇 silker 载荷仍粘贴节点，纯文本放行原生粘贴", () => {
-    const { clipboard } = setup();
-    const consumer = fakeConsumer("test");
-    consumer.isEditing = () => true;
-    clipboard.register(consumer);
-    const overlay = { tagName: "DIV", isContentEditable: true };
-    const entry: ClipboardEntry = { kind: "test", payload: { v: 1 } };
-    const e1 = fakeEvent({ mime: JSON.stringify(entry), text: "hello", target: overlay });
-    doc.dispatch("paste", e1 as unknown as Record<string, unknown>);
-    expect(e1.defaultPrevented).toBe(true);
-    expect(consumer.calls.deserialize).toEqual(entry);
-    const e2 = fakeEvent({ text: "hello", target: overlay });
-    doc.dispatch("paste", e2 as unknown as Record<string, unknown>);
-    expect(e2.defaultPrevented).toBe(false);
+    expect(consumer.calls.pasteText).toBeUndefined();
   });
 
   it("register 返回注销函数：注销后不再参与分发", () => {
@@ -299,7 +347,7 @@ describe("Clipboard 插件", () => {
         readText: async () => written[written.length - 1] ?? "",
       },
     });
-    // 无 ClipboardItem 环境退化 writeText：写可读 tab 文本（非信封 JSON）
+    // 无 ClipboardItem 环境退化 writeText：写可读兜底文本（非信封 JSON）
     const entry: ClipboardEntry = { kind: "test", payload: { v: 3 }, text: "你好\t子" };
     await clipboard.write(entry);
     expect(written).toHaveLength(1);

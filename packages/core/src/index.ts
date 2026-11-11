@@ -39,5 +39,12 @@ export { EXPORT_CAPABILITY } from './capabilities/exporter'
 export type { Point, PointerHandlers, PointerCapability } from './capabilities/interaction'
 export type { CanvasClickCapability } from './capabilities/interaction'
 export { POINTER_CAPABILITY, CANVAS_CLICK_CAPABILITY } from './capabilities/interaction'
-export type { ClipboardEntry, ClipboardConsumer, ClipboardCapability } from './capabilities/clipboard'
-export { CLIPBOARD_CAPABILITY, SILKER_CLIPBOARD_MIME } from './capabilities/clipboard'
+export type {
+  ClipboardEntry,
+  ClipboardConsumer,
+  ClipboardCapability,
+  ClipboardEventContext,
+  CopyDecision,
+  PasteTextDecision,
+} from './capabilities/clipboard'
+export { CLIPBOARD_CAPABILITY, SILKER_CLIPBOARD_MIME, hasTextSelection } from './capabilities/clipboard'

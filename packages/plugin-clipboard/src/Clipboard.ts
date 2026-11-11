@@ -1,21 +1,19 @@
-// 剪贴板插件：CLIPBOARD_CAPABILITY 的官方实现。机制层，领域无关——场景注册
-// ClipboardConsumer（kind + serialize/deserialize[/pasteText]），本插件在 document
-// 的 copy/paste 事件上统一分发：copy 时把首个非空载荷写入系统剪贴板，paste 时按
-// 载荷 kind 精确匹配还原图形/节点，无 silker 载荷的纯文本交给注册了 pasteText 的
-// consumer（外部文本建节点）。
-// 剪贴板三通道设计（Chrome paste 事件读不到自定义 MIME，结构化载荷必须走标准类型）：
-//   text/plain → 人类可读的 tab 缩进文本（entry.text），供飞书/记事本等外部应用
-//                粘贴出层级列表；
-//   text/html  → 嵌套 ul/li 渲染的层级大纲（外部应用粘贴出层级列表）+ 最外层
-//                元素 data-silker 属性承载 $silker 信封——silker 的 paste 处理器
-//                解析属性还原结构化节点载荷；
-//   自定义 MIME（web 前缀）→ 裸载荷，支持该类型的环境优先读取。
+// 剪贴板插件：CLIPBOARD_CAPABILITY 的官方实现。纯机制层，领域无关——不含任何
+// 场景策略（选区语义、文本形状判定、大纲渲染均归场景，见 core 的 ClipboardConsumer
+// 契约）。职责只有三件：
+//   1. document copy/paste 事件管道：copy 询问各 consumer 的 onCopy 决策；paste
+//      先按 kind 精确分发结构化载荷，无 silker 载荷的纯文本交 onPasteText 全权
+//      决策；真实输入框（INPUT/TEXTAREA）一律放行原生行为；
+//   2. 三通道编解码：结构化载荷必须走标准类型（Chrome paste 事件读不到自定义
+//      MIME）——text/plain 兜底文本 + text/html 最外层元素 data-silker 属性承载
+//      $silker 信封 + 自定义 MIME（web 前缀）裸载荷（支持该类型的环境优先读取）；
+//   3. 程序化 write/read（工具栏按钮等无 copy/paste 事件的入口）：ClipboardItem
+//      三通道写入，失败退化 writeText，内部缓冲镜像兜底。
 // 复制双路径：mod+c 命令（keydown 拦截后 write() 写系统剪贴板——Chrome 无文本
 // 选区时 Ctrl+C 不派发 copy 事件，命令路径兜底）+ copy 事件（右键菜单复制走
 // clipboardData.setData）。粘贴只走 paste 事件：Ctrl+V 必发、clipboardData
 // 同步可读、零权限；不绑 mod+v——否则 preventDefault 抑制 paste 事件，只能走
-// 需用户授权的 clipboard.read。事件 target 在可编辑元素（输入框/编辑覆盖层）
-// 内时直接放行原生文本复制粘贴。
+// 需用户授权的 clipboard.read。
 import {
   CLIPBOARD_CAPABILITY,
   SILKER_CLIPBOARD_MIME,
@@ -41,7 +39,6 @@ export class Clipboard implements Plugin, ClipboardCapability {
     app.provide(CLIPBOARD_CAPABILITY, this);
     document.addEventListener("copy", this.onCopy);
     document.addEventListener("paste", this.onPaste);
-    console.log("[clipdbg] Clipboard installed");
   }
 
   dispose() {
@@ -52,7 +49,6 @@ export class Clipboard implements Plugin, ClipboardCapability {
   }
 
   register(consumer: ClipboardConsumer): () => void {
-    console.log("[clipdbg] register consumer kind=", consumer.kind);
     this.consumers.add(consumer);
     return () => {
       this.consumers.delete(consumer);
@@ -60,8 +56,9 @@ export class Clipboard implements Plugin, ClipboardCapability {
   }
 
   // 程序化写入：三通道 ClipboardItem（剪贴板写入无权限要求）——自定义 MIME 裸
-  // 载荷 + text/plain 可读 tab 文本 + text/html 信封。环境不支持 ClipboardItem
-  // 时退化为 writeText(entry.text)（纯文本，外部可见；结构化载荷仅内部缓冲兜底）
+  // 载荷 + text/plain 可读文本 + text/html 信封（可见部分用场景自渲染的 entry.html）。
+  // 环境不支持 ClipboardItem 时退化为 writeText(entry.text)（纯文本，外部可见；
+  // 结构化载荷仅内部缓冲兜底）
   async write(entry: ClipboardEntry): Promise<void> {
     this.buffer = entry;
     const json = JSON.stringify(entry);
@@ -78,20 +75,16 @@ export class Clipboard implements Plugin, ClipboardCapability {
             "text/html": new Blob([html], { type: "text/html" }),
           }),
         ]);
-        console.log("[clipdbg] write via ClipboardItem ok, kind=", entry.kind);
         return;
       }
-      console.log("[clipdbg] write ClipboardItem unavailable, kind=", entry.kind);
     } catch (err) {
       // 自定义 MIME 被拒（如部分 Firefox）：退化为纯文本
-      console.log("[clipdbg] write ClipboardItem FAILED:", err);
+      console.warn("[clipboard] write via ClipboardItem failed:", err);
     }
     try {
       await navigator.clipboard.writeText(text);
-      console.log("[clipdbg] write via writeText ok, kind=", entry.kind);
-    } catch (err) {
+    } catch {
       // 权限/安全上下文不满足：静默降级，内部缓冲兜底（同页程序化粘贴仍可用）
-      console.log("[clipdbg] write ALL paths FAILED (buffer only):", err);
     }
   }
 
@@ -106,107 +99,66 @@ export class Clipboard implements Plugin, ClipboardCapability {
     return this.buffer?.kind === kind ? this.buffer : null;
   }
 
-  // copy 分发：真实输入框内放行原生复制；编辑覆盖层内有文字选区 → 原生复制
-  // 文字，光标折叠（未选中）→ 复制当前节点子树；其余画布态依次询问 consumer，
-  // 首个非空载荷胜出——三通道写入（结构化 MIME / 可读 text/plain / text/html 信封）
+  // copy 分发：真实输入框内放行原生复制；其余按注册序询问 consumer.onCopy，
+  // 首个非 null 决策生效——"native" 放行原生复制，载荷则写三通道并拦截。
+  // 编辑态选区语义（复制文字 vs 复制节点）由场景决策，机制层不窥探选区
   private onCopy = (e: ClipboardEvent) => {
-    const t = e.target as HTMLElement | null;
-    if (!t) return;
-    const tag = t.tagName;
+    const target = e.target as HTMLElement | null;
+    const tag = target?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA") return;
-    if (t.isContentEditable) {
-      for (const c of this.consumers) {
-        if (!c.isEditing?.()) continue;
-        const sel = typeof window !== "undefined" ? window.getSelection?.() : null;
-        if (sel && !sel.isCollapsed && t.contains(sel.anchorNode)) {
-          console.log("[clipdbg] copy event: editing with text selection, native");
-          return;
-        }
-      }
-      console.log("[clipdbg] copy event: editing collapsed, fall through to node copy");
-    }
     for (const consumer of this.consumers) {
-      const entry = consumer.serialize();
-      if (!entry) continue;
-      e.preventDefault();
-      e.clipboardData?.setData(SILKER_CLIPBOARD_MIME, JSON.stringify(entry));
-      e.clipboardData?.setData("text/plain", entry.text ?? "");
-      e.clipboardData?.setData("text/html", toEnvelopeHtml(entry));
-      this.buffer = entry;
-      console.log("[clipdbg] copy serialized via event, kind=", entry.kind);
-      return;
+      const decision = consumer.onCopy({ target });
+      if (decision === "native") return;
+      if (decision) {
+        e.preventDefault();
+        e.clipboardData?.setData(SILKER_CLIPBOARD_MIME, JSON.stringify(decision));
+        e.clipboardData?.setData("text/plain", decision.text ?? "");
+        e.clipboardData?.setData("text/html", toEnvelopeHtml(decision));
+        this.buffer = decision;
+        return;
+      }
     }
-    console.log("[clipdbg] copy: no consumer produced entry");
   };
 
-  // paste 分发（行为由剪贴板内容决定，而非焦点位置）：真实输入框一律放行；
-  // silker 载荷优先——kind 匹配即粘贴节点，即使焦点在编辑覆盖层内（复制节点后
-  // 进输入模式粘贴仍得节点）；编辑覆盖层内纯文字（无换行/Tab）放行原生粘贴到
-  // 光标，结构化文本交 pasteText 解析为节点；其余（画布/激活态覆盖层）纯文本
-  // 交 pasteText 建节点
+  // paste 分发（行为由剪贴板内容决定）：真实输入框一律放行；silker 载荷优先——
+  // kind 精确匹配即分发给 consumer 还原（事件拦截），即使焦点在编辑覆盖层内；
+  // 无 silker 载荷的纯文本交 onPasteText 全权决策（贴光标/建节点/放行均为场景
+  // 策略，机制层不判定文本形状）
   private onPaste = (e: ClipboardEvent) => {
     const target = e.target as HTMLElement | null;
-    if (!target) return;
-    const tag = target.tagName;
-    if (tag === "INPUT" || tag === "TEXTAREA") {
-      console.log("[clipdbg] paste: real input, passthrough");
-      return;
-    }
+    const tag = target?.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA") return;
 
     const text = e.clipboardData?.getData("text/plain") ?? "";
     const mime = e.clipboardData?.getData(SILKER_CLIPBOARD_MIME);
     const html = e.clipboardData?.getData("text/html") ?? "";
     // silker 载荷三路来源：结构化 MIME → text/html 的 data-silker 信封（Chrome
     // paste 事件读不到自定义 MIME 时的主通道）→ text/plain 中的 $silker 信封
-    // （仅识别完整信封 JSON；普通 tab 文本不会误判）
+    // （仅识别完整信封 JSON；普通文本不会误判）
     const entry =
       (mime ? rawEntry(mime) ?? fromText(mime) : null) ??
       fromEnvelopeHtml(html) ??
       fromText(text);
-    console.log(
-      "[clipdbg] paste event: target=", tag,
-      "id=", target.id || target.className || "-",
-      "ce=", target.isContentEditable,
-      "types=", e.clipboardData?.types,
-      "mimeLen=", mime?.length ?? 0,
-      "htmlHasPayload=", html.includes("data-silker"),
-      "text=", JSON.stringify(text.slice(0, 60)),
-      "entryKind=", entry?.kind ?? null,
-    );
 
-    if (entry && this.dispatchEntry(e, entry)) {
-      console.log("[clipdbg] paste: dispatched entry kind=", entry.kind);
-      return;
-    }
-
-    if (target.isContentEditable) {
-      for (const c of this.consumers) {
-        if (!c.isEditing?.()) continue;
-        // 编辑会话 + 纯文字（无换行/Tab）→ 原生粘贴到光标位置；
-        // 结构化文本（含换行/Tab，如飞书大纲复制）→ 交 pasteText 解析为节点
-        if (text && !/[\n\t]/.test(text)) {
-          console.log("[clipdbg] paste: scene editing plain text, passthrough native");
-          return;
-        }
-        break;
-      }
-    }
+    if (entry && this.dispatchEntry(e, entry)) return;
 
     if (text) {
       for (const consumer of this.consumers) {
-        if (!consumer.pasteText) continue;
-        e.preventDefault();
-        consumer.pasteText(text);
-        console.log("[clipdbg] paste: pasteText dispatched");
-        return;
+        if (!consumer.onPasteText) continue;
+        const decision = consumer.onPasteText({ target, text });
+        if (decision === "handled") {
+          e.preventDefault();
+          return;
+        }
+        if (decision === "native") return;
+        // null → 继续询问下一个 consumer
       }
     }
-    console.log("[clipdbg] paste: nothing dispatched");
   };
 
   // 按载荷 kind 匹配 consumer 并粘贴；匹配成功返回 true（事件已消费）
-  private dispatchEntry(e: ClipboardEvent, entry: ClipboardEntry | null): boolean {
-    if (!entry?.kind) return false;
+  private dispatchEntry(e: ClipboardEvent, entry: ClipboardEntry): boolean {
+    if (!entry.kind) return false;
     for (const consumer of this.consumers) {
       if (consumer.kind !== entry.kind) continue;
       e.preventDefault();
@@ -217,58 +169,12 @@ export class Clipboard implements Plugin, ClipboardCapability {
   }
 }
 
-// text/html 信封：可见部分渲染为嵌套 ul/li 层级列表（外部应用粘贴出大纲列表而非
-// 纯文本块），最外层元素 data-silker 属性承载 URL 编码的 $silker 信封。属性值经
+// text/html 信封：可见部分用场景自渲染的 entry.html（机制层不渲染场景内容），
+// 最外层元素 data-silker 属性承载 URL 编码的 $silker 信封。属性值经
 // encodeURIComponent，不含引号等需转义字符，可靠正则提取
 function toEnvelopeHtml(entry: ClipboardEntry): string {
   const encoded = encodeURIComponent(JSON.stringify(toEnvelope(entry)));
-  return `<div data-silker="${encoded}">${toOutlineHtml(entry.text ?? "")}</div>`;
-}
-
-// 大纲文本 → 嵌套列表 HTML：缩进规则与 mindmap parseTextTree 一致（Tab 与 4 空格
-// 组计深度，最小缩进为顶层），栈式构建层级后递归渲染；空行跳过
-function toOutlineHtml(text: string): string {
-  const lines = text
-    .replace(/\r\n?/g, "\n")
-    .split("\n")
-    .filter((l) => l.trim().length);
-  if (!lines.length) return "";
-  const depthOf = (line: string): number => {
-    let tabs = 0;
-    let spaces = 0;
-    for (const ch of line) {
-      if (ch === "\t") {
-        tabs++;
-        spaces = 0;
-      } else if (ch === " ") {
-        spaces++;
-      } else break;
-    }
-    return tabs + Math.floor(spaces / 4);
-  };
-  const esc = (s: string) =>
-    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  interface Item {
-    text: string;
-    children: Item[];
-  }
-  const min = Math.min(...lines.map(depthOf));
-  const roots: Item[] = [];
-  const stack: { depth: number; item: Item }[] = [];
-  for (const line of lines) {
-    const depth = Math.max(0, depthOf(line) - min);
-    const item: Item = { text: esc(line.trim()), children: [] };
-    while (stack.length && stack[stack.length - 1]!.depth >= depth) stack.pop();
-    (stack[stack.length - 1]?.item.children ?? roots).push(item);
-    stack.push({ depth, item });
-  }
-  const render = (items: Item[]): string =>
-    `<ul style="margin:0;padding-left:1.5em">` +
-    items
-      .map((i) => `<li>${i.text}${i.children.length ? render(i.children) : ""}</li>`)
-      .join("") +
-    `</ul>`;
-  return render(roots);
+  return `<div data-silker="${encoded}">${entry.html ?? ""}</div>`;
 }
 
 function fromEnvelopeHtml(html: string): ClipboardEntry | null {

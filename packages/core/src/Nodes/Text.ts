@@ -152,10 +152,22 @@ export class Text extends Node {
         measurer.style.whiteSpace = 'pre-wrap'
         measurer.style.width = `${contentWidth}px`
         const lines = this.wrapLines(measurer, this.text)
-        // 全空行（无可视字符，如清空残留的换行）按单行空文本钳宽，不撑到最大宽度
-        if (lines.length === 1 || !lines.some(l => l)) {
-          this.width = Math.min(Math.max(textWidth + pl + pr, boxMinWidth), boxMaxWidth)
+        // 硬换行判定：\n 拆段数与最终行数一致，说明每段都在最大宽度内、未触发软换行——
+        // 此时宽度按最宽行收缩，不因用户手动回车而撑到最大宽度（软换行才由最大宽度驱动）
+        const segCount = this.text.split('\n').length
+        const hardWrapOnly = segCount > 1 && lines.length === segCount && lines.some(l => l)
+        if (lines.length === 1 || !lines.some(l => l) || hardWrapOnly) {
+          // 单行 / 全空行 / 仅硬换行：逐行取实际宽度，钳制在宽度范围内
+          measurer.style.whiteSpace = 'pre'
+          measurer.style.width = 'max-content'
+          let maxLineWidth = 0
+          for (const line of lines) {
+            measurer.textContent = line
+            maxLineWidth = Math.max(maxLineWidth, measurer.getBoundingClientRect().width)
+          }
+          this.width = Math.min(Math.max(maxLineWidth + pl + pr, boxMinWidth), boxMaxWidth)
         } else {
+          // 存在软换行：宽度由最大宽度驱动
           this.width = boxMaxWidth
         }
         this.lines = lines

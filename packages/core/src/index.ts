@@ -47,4 +47,9 @@ export type {
   CopyDecision,
   PasteTextDecision,
 } from './capabilities/clipboard'
-export { CLIPBOARD_CAPABILITY, SILKER_CLIPBOARD_MIME, hasTextSelection } from './capabilities/clipboard'
+export {
+  CLIPBOARD_CAPABILITY,
+  SILKER_CLIPBOARD_MIME,
+  hasTextSelection,
+  hasDocumentTextSelection,
+} from './capabilities/clipboard'

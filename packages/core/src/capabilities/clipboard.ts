@@ -59,6 +59,15 @@ export function hasTextSelection(target: Element | null): boolean {
   return !!sel && !sel.isCollapsed && !!target && target.contains(sel.anchorNode);
 }
 
+// 共享 DOM 谓词：文档任意位置存在非折叠文字选区（编辑覆盖层内选中文字，或宿主
+// 页面其它区域如 AI 对话面板）。场景 copy 决策与 mod+c 命令守卫复用："有选区
+// 即原生，无选区画布接管"——放行原生复制（复制文字），未拦截画布的节点复制
+export function hasDocumentTextSelection(): boolean {
+  if (typeof window === "undefined") return false;
+  const sel = window.getSelection?.();
+  return !!sel && !sel.isCollapsed;
+}
+
 // 剪贴板能力契约：机制由官方 plugin-clipboard 实现（document copy/paste 监听 +
 // 自定义 MIME + data-silker 信封 + 内部缓冲），场景只按契约注册消费方，不直接
 // 触碰剪贴板 API。程序化路径（工具栏按钮等无 copy/paste 事件的入口）走 write/

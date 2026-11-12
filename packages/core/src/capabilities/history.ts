@@ -34,6 +34,10 @@ export interface HistoryCapability {
   // 栈可用性：供宿主按钮禁用态与快捷键守卫
   readonly canUndo: boolean;
   readonly canRedo: boolean;
+  // 栈深度（可选）：供 AI 上下文等消费方告知"还有几条可撤销/重做"，
+  // 未实现的提供方按 exportJSON 的栈长兜底
+  readonly undoCount?: number;
+  readonly redoCount?: number;
   // 导出历史栈为可序列化命令（撤销栈在先，重做栈在后）。
   // 栈内任一命令不可序列化（无 toJSON 或 toJSON 返回 null）时整体返回 null，
   // 拒绝部分导出——保证导入后 undo/redo 语义完整

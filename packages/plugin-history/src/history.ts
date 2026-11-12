@@ -74,6 +74,15 @@ export class History implements Plugin, HistoryCapability {
     return this.redoStack.length > 0;
   }
 
+  // 栈深度：撤销栈/重做栈当前命令条数（栈内命令不可序列化时仍可知条数）
+  get undoCount(): number {
+    return this.undoStack.length;
+  }
+
+  get redoCount(): number {
+    return this.redoStack.length;
+  }
+
   // 导出历史栈：栈内逐条调用 toJSON，任一命令不可序列化（无 toJSON 或返回
   // null）时整体返回 null——组合命令是原子单元，不允许部分导出
   exportJSON(): HistorySnapshot | null {

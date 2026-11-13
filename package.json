@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "description": "silkor 画布内核与官方能力插件（本仓根包不发布）",
-  "license": "ISC",
+  "license": "MIT",
   "scripts": {
     "build": "pnpm -r build",
     "test": "vitest run",

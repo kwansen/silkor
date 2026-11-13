@@ -10,7 +10,7 @@
     "plugin-system",
     "typescript"
   ],
-  "license": "ISC",
+  "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

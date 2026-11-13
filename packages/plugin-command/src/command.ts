@@ -2,11 +2,11 @@
 // （id + run + enabled），再按组合串绑定键位；插件在 document keydown 上统一分发，
 // 命中组合键时 preventDefault 并执行对应命令。键位绑定在运行期可改，应用层工具栏与
 // 第三方插件按能力键复用命令、重绑键位，不 import 具体场景类型。
-import { COMMAND_CAPABILITY } from "@silker/core";
-import type { App, Plugin } from "@silker/core";
-import type { CommandCapability, CommandDefinition } from "@silker/core";
+import { COMMAND_CAPABILITY } from "@silkor/core";
+import type { App, Plugin } from "@silkor/core";
+import type { CommandCapability, CommandDefinition } from "@silkor/core";
 
-// 命令契约（CommandDefinition / CommandCapability / COMMAND_CAPABILITY）由 @silker/core
+// 命令契约（CommandDefinition / CommandCapability / COMMAND_CAPABILITY）由 @silkor/core
 // 定义与命名，本包只提供官方实现；消费方一律按能力键消费，不 import 本包类型
 
 // ---- 组合键归一化 ----

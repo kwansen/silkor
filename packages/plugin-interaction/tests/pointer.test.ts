@@ -1,6 +1,6 @@
 // 指针插件回归测试：能力注册、事件绑定/坐标换算、撤销与 dispose 语义
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { App, POINTER_CAPABILITY } from "@silker/core";
+import { App, POINTER_CAPABILITY } from "@silkor/core";
 import { Pointer } from "../src/Pointer";
 
 // 记录型事件目标：记录监听并支持手动派发（测试内替代 window/document/canvas）

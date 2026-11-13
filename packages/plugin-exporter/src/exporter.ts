@@ -1,10 +1,10 @@
 // 导出插件：把节点列表离屏渲染为图片，通过能力协议暴露，mindmap / flowchart 共用。
 // 只依赖 Core 的 Node 渲染管线（node.render + getBounds 契约），不依赖任何领域包，
 // 消费方按能力键消费（app.require(EXPORT_CAPABILITY)），不 import 本插件类型。
-// 导出契约（ExporterCapability / EXPORT_CAPABILITY / ExportOptions）由 @silker/core 定义
-import { Renderer, Camera, EXPORT_CAPABILITY } from "@silker/core";
-import type { App, Bounds, Node, Plugin } from "@silker/core";
-import type { ExportOptions } from "@silker/core";
+// 导出契约（ExporterCapability / EXPORT_CAPABILITY / ExportOptions）由 @silkor/core 定义
+import { Renderer, Camera, EXPORT_CAPABILITY } from "@silkor/core";
+import type { App, Bounds, Node, Plugin } from "@silkor/core";
+import type { ExportOptions } from "@silkor/core";
 
 // 遍历可见节点：与 Renderer 一致，不可见节点连同子树整体跳过
 // （mindmap 折叠子树、隐藏连线因此天然不进入导出）

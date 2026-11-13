@@ -1,11 +1,11 @@
-﻿import { CANVAS_CLICK_CAPABILITY } from '@silker/core'
-import type { App, Node, Plugin } from '@silker/core'
-import type { CanvasClickCapability } from '@silker/core'
+﻿import { CANVAS_CLICK_CAPABILITY } from '@silkor/core'
+import type { App, Node, Plugin } from '@silkor/core'
+import type { CanvasClickCapability } from '@silkor/core'
 
 // 点击分发插件：画布 mousedown/click 绑定、拖拽阈值判定、命中测试与节点点击分发。
 // 节点点击回调经注册表（onNodeClick）登记在本插件——挂钩所有权收口在分发方，
 // 节点模型不携带回调字段；WeakMap 登记使移除场景的节点可被回收。
-// 点击契约（CanvasClickCapability / CANVAS_CLICK_CAPABILITY）由 @silker/core 定义，
+// 点击契约（CanvasClickCapability / CANVAS_CLICK_CAPABILITY）由 @silkor/core 定义，
 // 独立绑定事件（不依赖 Pointer 能力），无任何插件时点击分发依然可用
 export class Clicker implements Plugin, CanvasClickCapability {
   // 拖拽判定阈值（屏幕像素）：位移超过该值视为拖拽而非点击。
@@ -35,7 +35,7 @@ export class Clicker implements Plugin, CanvasClickCapability {
     listen(canvas, 'click', (e) => this.dispatch(e as MouseEvent))
     app.provide(CANVAS_CLICK_CAPABILITY, this, {
       version: '1.0',
-      provider: '@silker/plugin-interaction',
+      provider: '@silkor/plugin-interaction',
     })
   }
 

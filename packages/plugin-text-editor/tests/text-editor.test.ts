@@ -4,8 +4,8 @@
 // 点击激活委托给点击分发能力（CanvasClickCapability.onNodeClick，注册表在分发方），
 // 测试用桩实现代替真实分发插件，聚焦绑定/解绑生命周期
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { App, Node, Text, CANVAS_CLICK_CAPABILITY } from "@silker/core";
-import type { CanvasClickCapability } from "@silker/core";
+import { App, Node, Text, CANVAS_CLICK_CAPABILITY } from "@silkor/core";
+import type { CanvasClickCapability } from "@silkor/core";
 import { TextEditor } from "../src/TextEditor";
 
 // 记录型事件目标：记录监听并支持手动派发

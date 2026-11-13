@@ -1,8 +1,8 @@
-import { VIEWPORT_CAPABILITY } from '@silker/core'
-import type { App, Plugin } from '@silker/core'
-import type { Bounds, ViewportCapability } from '@silker/core'
+import { VIEWPORT_CAPABILITY } from '@silkor/core'
+import type { App, Plugin } from '@silkor/core'
+import type { Bounds, ViewportCapability } from '@silkor/core'
 
-// 视口契约（ViewportCapability / VIEWPORT_CAPABILITY）由 @silker/core 定义与命名，
+// 视口契约（ViewportCapability / VIEWPORT_CAPABILITY）由 @silkor/core 定义与命名，
 // 本包只提供官方实现；fit 入参即 core 的包围盒 Bounds
 
 // 视口插件：滚轮以鼠标为中心缩放，右键拖拽平移画布（左键默认保留给选择/拖节点），
@@ -24,7 +24,7 @@ export class Viewport implements Plugin, ViewportCapability {
     this.canvas = canvas
     app.provide(VIEWPORT_CAPABILITY, this, {
       version: '1.0',
-      provider: '@silker/plugin-viewport',
+      provider: '@silkor/plugin-viewport',
     })
     // 右键负责拖拽：光标平时保持 default，仅拖拽时切换小手（见 beginPan/onUp）
     // 阻止右键菜单与右键默认行为（页面层可挡掉浏览器默认右键交互；

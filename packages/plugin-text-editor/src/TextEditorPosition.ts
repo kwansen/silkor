@@ -1,4 +1,4 @@
-import type { Text } from '@silker/core'
+import type { Text } from '@silkor/core'
 
 // 视口变换参数：画布平移量与缩放比例
 type Viewport = { x: number; y: number; scale: number }

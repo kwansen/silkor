@@ -1,7 +1,7 @@
 // 渲染器快照位图缓存回归测试：全量渲染刷新快照、相机-only 快速路径 blit、
 // 超余量/超倍率 rebase、降级与 resize 语义（详见 Renderer.ts 快照区注释）
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { App, Node } from "@silker/core";
+import { App, Node } from "@silkor/core";
 
 // 测试用具体节点：render 为空操作，固定宽高定位
 class TestNode extends Node {

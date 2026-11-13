@@ -1,4 +1,4 @@
-import type { Text } from "@silker/core";
+import type { Text } from "@silkor/core";
 
 // 创建覆盖在文本节点上的可编辑视图
 export class TextEditorView {
@@ -9,9 +9,9 @@ export class TextEditorView {
     if (TextEditorView.styleInjected) return;
     const style = document.createElement("style");
     style.textContent = `
-      .silker-text-editor { outline: none; }
-      .silker-text-editor.silker-text-hidden { caret-color: transparent; }
-      .silker-text-editor.silker-text-hidden::selection { background: transparent; }
+      .silkor-text-editor { outline: none; }
+      .silkor-text-editor.silkor-text-hidden { caret-color: transparent; }
+      .silkor-text-editor.silkor-text-hidden::selection { background: transparent; }
     `;
     document.head.appendChild(style);
     TextEditorView.styleInjected = true;
@@ -31,7 +31,7 @@ export class TextEditorView {
     this.applyWrapStyle(el, text);
     this.applyPadding(el, text);
     // 基础类始终存在（覆盖 UA 样式表的 :focus-visible 焦点环）
-    el.className = "silker-text-editor";
+    el.className = "silkor-text-editor";
     // 初始即隐藏态：透明沉底、文字由 canvas 渲染、不拦截指针事件（拖拽落在画布），
     // 仅作为输入缓冲接收键盘/IME（focus 与 z-index 无关）
     this.applyHidden(el, text);
@@ -40,7 +40,7 @@ export class TextEditorView {
 
   // 切到显示态外观：恢复文字色与置顶，尺寸按宽度范围跟随内容
   applyVisible(el: HTMLDivElement, text: Text) {
-    el.classList.remove("silker-text-hidden");
+    el.classList.remove("silkor-text-hidden");
     el.style.color = text.fill;
     el.style.opacity = "";
     el.style.zIndex = "";
@@ -51,7 +51,7 @@ export class TextEditorView {
   // 虚拟 DOM 不可见、不拦截指针事件（拖拽落在画布），仅作为输入缓冲接收键盘/IME
   // （focus 与 z-index 无关），文字交还 canvas 渲染
   applyHidden(el: HTMLDivElement, text: Text) {
-    el.classList.add("silker-text-hidden");
+    el.classList.add("silkor-text-hidden");
     el.textContent = "";
     el.style.color = "transparent";
     el.style.opacity = "0";

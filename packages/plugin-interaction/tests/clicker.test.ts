@@ -1,6 +1,6 @@
 // 点击分发插件回归测试：命中分发、空白点击、拖拽阈值与 dispose 语义
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { App, Node, CANVAS_CLICK_CAPABILITY } from "@silker/core";
+import { App, Node, CANVAS_CLICK_CAPABILITY } from "@silkor/core";
 import { Clicker } from "../src/Clicker";
 
 // 测试用具体节点：render 为空操作；hitNode 用简单矩形判定

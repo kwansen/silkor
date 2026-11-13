@@ -1,6 +1,6 @@
 // 视口插件回归测试：滚轮以鼠标为中心缩放、右键拖拽平移、fit 拟合与 dispose 语义
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { App, VIEWPORT_CAPABILITY } from "@silker/core";
+import { App, VIEWPORT_CAPABILITY } from "@silkor/core";
 import { Viewport } from "../src/Viewport";
 
 // 记录型事件目标：记录监听并支持手动派发（测试内替代 window/canvas）

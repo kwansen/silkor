@@ -6,12 +6,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   App,
   CLIPBOARD_CAPABILITY,
-  SILKER_CLIPBOARD_MIME,
+  SILKOR_CLIPBOARD_MIME,
   type ClipboardConsumer,
   type ClipboardEntry,
   type CopyDecision,
   type PasteTextDecision,
-} from "@silker/core";
+} from "@silkor/core";
 import { Clipboard } from "../src/Clipboard";
 
 // 记录型事件目标：记录监听并支持手动派发（测试内替代 document/navigator）
@@ -56,7 +56,7 @@ function fakeEvent(opts: {
   target?: { tagName?: string; isContentEditable?: boolean };
 }) {
   const store = new Map<string, string>();
-  if (opts.mime !== undefined) store.set(SILKER_CLIPBOARD_MIME, opts.mime);
+  if (opts.mime !== undefined) store.set(SILKOR_CLIPBOARD_MIME, opts.mime);
   if (opts.text !== undefined) store.set("text/plain", opts.text);
   if (opts.html !== undefined) store.set("text/html", opts.html);
   return {
@@ -140,23 +140,23 @@ describe("Clipboard 插件", () => {
     const e = fakeEvent({});
     doc.dispatch("copy", e as unknown as Record<string, unknown>);
     expect(e.defaultPrevented).toBe(true);
-    expect(e.clipboardData!.getData(SILKER_CLIPBOARD_MIME)).toBe(JSON.stringify(entry));
+    expect(e.clipboardData!.getData(SILKOR_CLIPBOARD_MIME)).toBe(JSON.stringify(entry));
     // text/plain 是可读兜底文本
     expect(e.clipboardData!.getData("text/plain")).toBe("你好\t子");
-    // text/html 信封：场景自渲染的可见内容 + data-silker 属性承载结构化载荷
+    // text/html 信封：场景自渲染的可见内容 + data-silkor 属性承载结构化载荷
     const html = e.clipboardData!.getData("text/html");
     expect(html).toContain("<ul><li>你好</li></ul>");
-    expect(html).toContain("data-silker=");
+    expect(html).toContain("data-silkor=");
   });
 
-  it("copy：载荷无 html 时信封可见部分为空（机制层不渲染场景内容），仅 data-silker 承载载荷", () => {
+  it("copy：载荷无 html 时信封可见部分为空（机制层不渲染场景内容），仅 data-silkor 承载载荷", () => {
     const { clipboard } = setup();
     const entry: ClipboardEntry = { kind: "test", payload: 1, text: "文本" };
     clipboard.register(fakeConsumer("test", entry));
     const e = fakeEvent({});
     doc.dispatch("copy", e as unknown as Record<string, unknown>);
     const html = e.clipboardData!.getData("text/html");
-    expect(html).toContain("data-silker=");
+    expect(html).toContain("data-silkor=");
     expect(html).not.toContain("<li>");
   });
 
@@ -168,7 +168,7 @@ describe("Clipboard 插件", () => {
     const e = fakeEvent({});
     doc.dispatch("copy", e as unknown as Record<string, unknown>);
     expect(e.defaultPrevented).toBe(false);
-    expect(e.clipboardData!.getData(SILKER_CLIPBOARD_MIME)).toBe("");
+    expect(e.clipboardData!.getData(SILKOR_CLIPBOARD_MIME)).toBe("");
   });
 
   it("copy：onCopy 返回 null 不参与，继续询问下一个 consumer（按注册序首个决策生效）", () => {
@@ -181,7 +181,7 @@ describe("Clipboard 插件", () => {
     const e = fakeEvent({});
     doc.dispatch("copy", e as unknown as Record<string, unknown>);
     expect(e.defaultPrevented).toBe(true);
-    expect(e.clipboardData!.getData(SILKER_CLIPBOARD_MIME)).toBe(
+    expect(e.clipboardData!.getData(SILKOR_CLIPBOARD_MIME)).toBe(
       JSON.stringify({ kind: "b", payload: 2 }),
     );
   });
@@ -208,15 +208,15 @@ describe("Clipboard 插件", () => {
     }
   });
 
-  it("paste：text/html 的 data-silker 信封还原节点（Chrome 主通道）", () => {
+  it("paste：text/html 的 data-silkor 信封还原节点（Chrome 主通道）", () => {
     const { clipboard } = setup();
     const consumer = fakeConsumer("test");
     clipboard.register(consumer);
     const entry: ClipboardEntry = { kind: "test", payload: { v: 5 }, text: "你好" };
-    const encoded = encodeURIComponent(JSON.stringify({ $silker: entry }));
+    const encoded = encodeURIComponent(JSON.stringify({ $silkor: entry }));
     const e = fakeEvent({
       text: "你好",
-      html: `<span data-silker="${encoded}" style="white-space:pre-wrap">你好</span>`,
+      html: `<span data-silkor="${encoded}" style="white-space:pre-wrap">你好</span>`,
     });
     doc.dispatch("paste", e as unknown as Record<string, unknown>);
     expect(e.defaultPrevented).toBe(true);
@@ -239,13 +239,13 @@ describe("Clipboard 插件", () => {
     const consumer = fakeConsumer("test");
     clipboard.register(consumer);
     const entry: ClipboardEntry = { kind: "test", payload: 7 };
-    const e = fakeEvent({ text: JSON.stringify({ $silker: entry }) });
+    const e = fakeEvent({ text: JSON.stringify({ $silkor: entry }) });
     doc.dispatch("paste", e as unknown as Record<string, unknown>);
     expect(e.defaultPrevented).toBe(true);
     expect(consumer.calls.deserialize).toEqual(entry);
   });
 
-  it("paste：silker 载荷分发优先于 onPasteText（复制节点后进编辑态粘贴仍得节点）", () => {
+  it("paste：silkor 载荷分发优先于 onPasteText（复制节点后进编辑态粘贴仍得节点）", () => {
     const { clipboard } = setup();
     const consumer = fakeConsumer("test");
     clipboard.register(consumer);
@@ -257,7 +257,7 @@ describe("Clipboard 插件", () => {
     expect(consumer.calls.pasteText).toBeUndefined();
   });
 
-  it("paste：无 silker 载荷的纯文本交 onPasteText 决策（handled 拦截）", () => {
+  it("paste：无 silkor 载荷的纯文本交 onPasteText 决策（handled 拦截）", () => {
     const { clipboard } = setup();
     const consumer = fakeConsumer("test");
     clipboard.register(consumer);

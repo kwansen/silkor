@@ -1,9 +1,9 @@
-import { POINTER_CAPABILITY } from '@silker/core'
-import type { App, Plugin } from '@silker/core'
-import type { Point, PointerCapability, PointerHandlers } from '@silker/core'
+import { POINTER_CAPABILITY } from '@silkor/core'
+import type { App, Plugin } from '@silkor/core'
+import type { Point, PointerCapability, PointerHandlers } from '@silkor/core'
 
 // 指针契约（Point / PointerHandlers / PointerCapability / POINTER_CAPABILITY）
-// 由 @silker/core 定义与命名，本包只提供官方实现
+// 由 @silkor/core 定义与命名，本包只提供官方实现
 
 // 指针插件：事件绑定/换算/清理机制层。install 时注册能力，消费方按能力键取用
 export class Pointer implements Plugin, PointerCapability {
@@ -17,7 +17,7 @@ export class Pointer implements Plugin, PointerCapability {
     this.app = app
     app.provide(POINTER_CAPABILITY, this, {
       version: '1.0',
-      provider: '@silker/plugin-interaction',
+      provider: '@silkor/plugin-interaction',
     })
   }
 

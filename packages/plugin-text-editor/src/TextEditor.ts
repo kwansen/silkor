@@ -1,7 +1,7 @@
-﻿﻿﻿﻿import { CANVAS_CLICK_CAPABILITY, SILKER_CLIPBOARD_MIME, Text } from '@silker/core'
-import type { App, EditableText, Node, Plugin } from '@silker/core'
-import { TEXT_EDITOR_CAPABILITY } from '@silker/core'
-import type { TextEditorCapability } from '@silker/core'
+﻿﻿﻿﻿import { CANVAS_CLICK_CAPABILITY, SILKOR_CLIPBOARD_MIME, Text } from '@silkor/core'
+import type { App, EditableText, Node, Plugin } from '@silkor/core'
+import { TEXT_EDITOR_CAPABILITY } from '@silkor/core'
+import type { TextEditorCapability } from '@silkor/core'
 import { TextEditorView } from './TextEditorView'
 import { TextEditorPosition } from './TextEditorPosition'
 
@@ -21,7 +21,7 @@ export interface TextEditorOptions {
   // 自定义可编辑节点子类），插件不硬编码节点类型决策
   canEdit?: (node: Node) => boolean
   // 粘贴放行判定：返回 true 表示该粘贴事件不归本插件消费，放行给 document 级
-  // 处理器（如 Clipboard 插件的节点分发）。默认判定剪贴板是否携带 silker 节点
+  // 处理器（如 Clipboard 插件的节点分发）。默认判定剪贴板是否携带 silkor 节点
   // 载荷；宿主采用其他剪贴板协议时可注入自定义判定，插件不感知具体载荷协议
   shouldReleasePaste?: (e: ClipboardEvent) => boolean
 }
@@ -69,7 +69,7 @@ export class TextEditor implements Plugin, TextEditorCapability {
     this.position = new TextEditorPosition(canvas)
     app.provide(TEXT_EDITOR_CAPABILITY, this, {
       version: '1.0',
-      provider: '@silker/plugin-text-editor',
+      provider: '@silkor/plugin-text-editor',
     })
     // 视口变化时重新对齐编辑框，跟随平移缩放；记录解除订阅句柄供 dispose 撤销
     this.offViewportChange = app.camera.onViewportChange(() =>
@@ -228,19 +228,19 @@ export class TextEditor implements Plugin, TextEditorCapability {
     return this.canEdit ? this.canEdit(node) : node instanceof Text
   }
 
-  // 粘贴放行判定：未注入 shouldReleasePaste 时用默认判定（silker 节点载荷协议）
+  // 粘贴放行判定：未注入 shouldReleasePaste 时用默认判定（silkor 节点载荷协议）
   private releasePaste(e: ClipboardEvent): boolean {
     return this.shouldReleasePaste
       ? this.shouldReleasePaste(e)
-      : this.isSilkerPayload(e)
+      : this.isSilkorPayload(e)
   }
 
-  // 默认粘贴放行判定：剪贴板携带 silker 节点载荷（自定义 MIME 或
-  // text/html data-silker 信封）时放行，交由 document 级 Clipboard 插件分发
-  private isSilkerPayload(e: ClipboardEvent): boolean {
+  // 默认粘贴放行判定：剪贴板携带 silkor 节点载荷（自定义 MIME 或
+  // text/html data-silkor 信封）时放行，交由 document 级 Clipboard 插件分发
+  private isSilkorPayload(e: ClipboardEvent): boolean {
     const cd = e.clipboardData
     const html = cd?.getData('text/html') ?? ''
-    return !!cd?.types.includes(SILKER_CLIPBOARD_MIME) || html.includes('data-silker')
+    return !!cd?.types.includes(SILKOR_CLIPBOARD_MIME) || html.includes('data-silkor')
   }
 
   // 绑定输入与失焦事件：输入同步文本并重渲染
@@ -252,7 +252,7 @@ export class TextEditor implements Plugin, TextEditorCapability {
     // 样式，插入的纯文本自然继承节点样式。用 execCommand 而非手工操作 Range，以保留
     // 浏览器原生撤销栈；粘贴不发生在 IME 组合窗口内，同步 execCommand 不会打断组合
     el.addEventListener('paste', e => {
-      // 粘贴放行判定（默认：剪贴板携带 silker 节点载荷）命中时不在此插文字，让
+      // 粘贴放行判定（默认：剪贴板携带 silkor 节点载荷）命中时不在此插文字，让
       // document 级 Clipboard 插件分发粘贴节点——元素级监听先于 document 触发，
       // 此处若 preventDefault 会与节点粘贴双重执行（节点+文字）
       if (this.releasePaste(e)) return

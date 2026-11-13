@@ -1,11 +1,11 @@
-import { App, EdgePan } from "@silker/core";
-import type { Plugin } from "@silker/core";
-import { selectionCapabilityKey } from "@silker/core";
+import { App, EdgePan } from "@silkor/core";
+import type { Plugin } from "@silkor/core";
+import { selectionCapabilityKey } from "@silkor/core";
 import type {
   MarqueeRect as Bounds,
   SelectionCapability,
   SelectionChange,
-} from "@silker/core";
+} from "@silkor/core";
 import { MarqueeBand } from "./MarqueeBand";
 
 // 框选命中测试：返回与选框相交的条目（拖框中每帧、松手时调用）。

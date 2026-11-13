@@ -1,0 +1,16 @@
+{
+  "name": "silkor-monorepo",
+  "private": true,
+  "type": "module",
+  "description": "silkor 画布内核与官方能力插件（本仓根包不发布）",
+  "license": "ISC",
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "vitest run",
+    "check:deps": "node scripts/check-deps.mjs"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.2",
+    "vitest": "^3.0.0"
+  }
+}

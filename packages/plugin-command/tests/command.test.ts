@@ -1,7 +1,7 @@
 // 命令与键位插件回归测试：命令注册表、键位归一化与分发、guard 与 dispose 语义
 // （"mod" 的平台解析在模块加载期定格，测试统一用显式修饰键保证确定性）
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { App, COMMAND_CAPABILITY } from "@silker/core";
+import { App, COMMAND_CAPABILITY } from "@silkor/core";
 import { Command } from "../src/command";
 
 // 记录型事件目标：记录监听并支持手动派发（测试内替代 document）

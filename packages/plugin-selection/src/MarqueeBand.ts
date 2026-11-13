@@ -1,4 +1,4 @@
-import { Node } from "@silker/core";
+import { Node } from "@silkor/core";
 
 // 框选橡皮筋矩形：左键拖框期间显示的半透明选框（渲染时实时读取起止点，元函数：跟随渲染）。
 // 由 Selection 插件在成框时挂入场景顶层、松手时移除；线宽按视口缩放折算，

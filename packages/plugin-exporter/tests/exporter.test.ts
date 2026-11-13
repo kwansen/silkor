@@ -2,7 +2,7 @@
 // node 环境无真实 canvas 与 DOMMatrix：离屏画布与矩阵用桩替代
 // （矩阵恒等桩仅对"节点无变换"的场景成立，符合本文件全部用例）
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { App, Node, EXPORT_CAPABILITY } from "@silker/core";
+import { App, Node, EXPORT_CAPABILITY } from "@silkor/core";
 import { Exporter } from "../src/exporter";
 
 // 测试用具体节点：render 为空操作，固定宽高定位

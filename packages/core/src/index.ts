@@ -49,7 +49,7 @@ export type {
 } from './capabilities/clipboard'
 export {
   CLIPBOARD_CAPABILITY,
-  SILKER_CLIPBOARD_MIME,
+  SILKOR_CLIPBOARD_MIME,
   hasTextSelection,
   hasDocumentTextSelection,
 } from './capabilities/clipboard'

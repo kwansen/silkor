@@ -1,6 +1,6 @@
 // 选中插件回归测试：选中模型语义 + 框选会话（成框阈值/挂载/命中/松手/清理）
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { App, Node, type NodeChangeEvent } from "@silker/core";
+import { App, Node, type NodeChangeEvent } from "@silkor/core";
 import { Selection } from "../src/Selection";
 
 // 测试用具体节点：render 为空操作

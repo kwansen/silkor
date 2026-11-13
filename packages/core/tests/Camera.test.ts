@@ -1,7 +1,7 @@
 // 相机回归测试：屏幕↔世界坐标互逆与画布偏移扣除、视口快照隔离、
 // 变化通知与退订（坐标系换算的唯一实现在 Camera.ts）
 import { describe, expect, it, vi } from "vitest";
-import { Camera } from "@silker/core";
+import { Camera } from "@silkor/core";
 
 // 画布桩：页面偏移 (10, 20)，CSS 尺寸 100x100
 function stubCanvas() {

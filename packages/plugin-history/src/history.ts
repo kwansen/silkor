@@ -2,17 +2,17 @@
 // "变更"抽成可逆命令（命令自带 redo/undo，直接改模型），本插件只管入栈、撤销与重放。
 // 不存快照，只存命令，内存开销与变更次数成正比而非模型规模。
 // 通过能力协议暴露，宿主与插件按能力键消费，不 import 本插件类型。
-import { HISTORY_CAPABILITY } from "@silker/core";
-import type { App, Plugin } from "@silker/core";
+import { HISTORY_CAPABILITY } from "@silkor/core";
+import type { App, Plugin } from "@silkor/core";
 import type {
   HistoryCapability,
   HistoryCommand,
   HistorySnapshot,
   SerializedCommand,
-} from "@silker/core";
+} from "@silkor/core";
 
 // 历史契约（HistoryCommand / HistoryCapability / HISTORY_CAPABILITY / CompositeCommand /
-// compose）由 @silker/core 定义与命名，本包只提供官方实现
+// compose）由 @silkor/core 定义与命名，本包只提供官方实现
 
 export interface HistoryOptions {
   // 单栈容量上限，超出丢最旧（防长会话内存无界增长），默认 100

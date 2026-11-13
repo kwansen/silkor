@@ -2,14 +2,14 @@ import { capabilityKey } from "../Capability"
 
 // 自定义 MIME：结构化载荷在系统剪贴板中的类型（copy/paste 事件内 setData/getData
 // 携带，零权限）。带 "web " 前缀同时兼容 ClipboardItem 异步写入路径；text/plain
-// 始终写入兜底文本，跨应用粘贴非 silker 内容时由场景按纯文本处理
-export const SILKER_CLIPBOARD_MIME = "web application/vnd.silker+json"
+// 始终写入兜底文本，跨应用粘贴非 silkor 内容时由场景按纯文本处理
+export const SILKOR_CLIPBOARD_MIME = "web application/vnd.silkor+json"
 
 // 剪贴板载荷：kind 为场景判别名（如 "mindmap" / "flowchart"），防止跨场景串台；
 // payload 为场景自定义结构化数据（序列化后的节点/形状快照）；text 为 text/plain
 // 兜底文本（跨应用粘贴时可读的内容表示）；html 为场景自渲染的 text/html 可见
 // 内容（如大纲 ul/li 列表）——场景文本格式的领域知识归场景，机制层不懂"缩进"
-// 是什么，只负责把它包进 data-silker 信封；未提供时信封可见部分为空
+// 是什么，只负责把它包进 data-silkor 信封；未提供时信封可见部分为空
 export interface ClipboardEntry {
   kind: string
   payload: unknown
@@ -45,7 +45,7 @@ export interface ClipboardConsumer {
   // 即使焦点在编辑覆盖层内，kind 匹配的节点粘贴仍优先（复制节点后进输入模式
   // 粘贴仍得节点）
   deserialize(entry: ClipboardEntry): void
-  // 剪贴板无 silker 载荷（或 kind 无匹配）时的纯文本全权决策（可选）：纯文字
+  // 剪贴板无 silkor 载荷（或 kind 无匹配）时的纯文本全权决策（可选）：纯文字
   // 贴入光标还是解析建节点是场景 UX——文本形状（是否含换行/Tab）的含义只有
   // 场景知道，机制层不再判定。未注册则外部纯文本放行原生行为
   onPasteText?(ctx: ClipboardEventContext & { text: string }): PasteTextDecision
@@ -69,7 +69,7 @@ export function hasDocumentTextSelection(): boolean {
 }
 
 // 剪贴板能力契约：机制由官方 plugin-clipboard 实现（document copy/paste 监听 +
-// 自定义 MIME + data-silker 信封 + 内部缓冲），场景只按契约注册消费方，不直接
+// 自定义 MIME + data-silkor 信封 + 内部缓冲），场景只按契约注册消费方，不直接
 // 触碰剪贴板 API。程序化路径（工具栏按钮等无 copy/paste 事件的入口）走 write/
 // read 异步读写系统剪贴板（需用户手势与权限），失败时回退内部缓冲
 export interface ClipboardCapability {
@@ -77,7 +77,7 @@ export interface ClipboardCapability {
   register(consumer: ClipboardConsumer): () => void
   // 程序化写入：内部缓冲镜像 + navigator.clipboard 异步写入（尽力而为，失败静默）
   write(entry: ClipboardEntry): Promise<void>
-  // 程序化读取：优先 navigator.clipboard.readText 解析 silker 载荷（权限/安全上下文
+  // 程序化读取：优先 navigator.clipboard.readText 解析 silkor 载荷（权限/安全上下文
   // 不满足时静默降级），kind 匹配则返回；无系统载荷时回退内部缓冲的同 kind 条目
   read(kind: string): Promise<ClipboardEntry | null>
 }

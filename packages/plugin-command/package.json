@@ -1,6 +1,14 @@
 {
-  "name": "@silker/plugin-command",
-  "version": "1.0.0",
+  "name": "@silkor/plugin-command",
+  "version": "0.1.0",
+  "description": "silkor 官方命令插件：画布命令的注册、分发与执行",
+  "keywords": [
+    "canvas",
+    "command",
+    "whiteboard",
+    "typescript"
+  ],
+  "license": "ISC",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -10,11 +18,20 @@
       "import": "./dist/index.js"
     }
   },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@silker/core": "workspace:*"
+    "@silkor/core": "workspace:*"
   },
   "devDependencies": {
     "typescript": "~6.0.2"

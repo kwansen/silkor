@@ -2,7 +2,7 @@
 // 旋转/透明度/可见性/子树递归序）、直绘路径的场景与覆盖层顺序及 save/restore 配对、
 // 天空层-only 路径（App 层的快照调度已由 RendererCache.test.ts 覆盖，不重复）
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Camera, Node, Renderer } from "@silker/core";
+import { Camera, Node, Renderer } from "@silkor/core";
 
 // 测试用具体节点：render 时向 ctx 写入标记属性（记录型 ctx 桩把属性写入也记录为
 // set:__mark 调用），从而在调用序中定位各节点的绘制位置

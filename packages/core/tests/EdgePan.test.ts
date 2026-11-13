@@ -2,8 +2,8 @@
 // 中心区零速续帧、无尺寸画布只续帧、未 start 不启动循环
 //（呈现统一走相机-only 快速路径：setViewport + requestCameraRender + onPan 回调）
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { EdgePan } from "@silker/core";
-import type { App } from "@silker/core";
+import { EdgePan } from "@silkor/core";
+import type { App } from "@silkor/core";
 
 let rafQueue: Array<() => void> = [];
 let cancelled: number[] = [];

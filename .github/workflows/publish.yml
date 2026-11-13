@@ -34,6 +34,17 @@ jobs:
         run: pnpm test
 
       - name: Publish
-        run: pnpm -r publish --access public --no-git-checks
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm -r publish --access public --no-git-checks --reporter=append-only 2>&1 | tee publish-output.log
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Upload publish log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: publish-output
+          path: publish-output.log
+          if-no-files-found: ignore

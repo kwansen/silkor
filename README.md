@@ -89,4 +89,4 @@ pnpm check:deps # 架构守护：校验包间依赖方向
 
 ## License
 
-ISC
+MIT

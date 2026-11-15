@@ -4,9 +4,11 @@ on:
   push:
     branches: [main]
 
-# GITHUB_TOKEN 默认只读：changesets action 需要推送版本分支并创建 PR
+# GITHUB_TOKEN 默认只读：changesets action 需要推送版本分支（contents）
+# 并创建 Version Packages PR（pull-requests）
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 

@@ -1,6 +1,6 @@
 {
   "name": "@silkor/plugin-viewport",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "silkor 官方视口插件：画布平移、缩放与视野控制",
   "keywords": [
     "canvas",

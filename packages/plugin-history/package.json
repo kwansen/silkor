@@ -1,6 +1,6 @@
 {
   "name": "@silkor/plugin-history",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "silkor 官方历史插件：画布操作的撤销与重做",
   "keywords": [
     "canvas",

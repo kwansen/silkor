@@ -1,6 +1,6 @@
 {
   "name": "@silkor/plugin-clipboard",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "silkor 官方剪贴板插件：画布内节点的复制、剪切与粘贴",
   "keywords": [
     "canvas",

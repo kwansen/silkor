@@ -4,6 +4,10 @@
   "type": "module",
   "description": "silkor 画布内核与官方能力插件（本仓根包不发布）",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kwansen/silkor.git"
+  },
   "scripts": {
     "build": "pnpm -r build",
     "test": "vitest run",

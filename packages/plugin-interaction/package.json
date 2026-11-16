@@ -1,6 +1,6 @@
 {
   "name": "@silkor/plugin-interaction",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "silkor 官方交互插件：指针事件、命中测试与节点拖拽",
   "keywords": [
     "canvas",

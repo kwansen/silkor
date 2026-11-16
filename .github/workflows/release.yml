@@ -5,10 +5,12 @@ on:
     branches: [main]
 
 # GITHUB_TOKEN 默认只读：changesets action 需要推送版本分支（contents）
-# 并创建 Version Packages PR（pull-requests）
+# 并创建 Version Packages PR（pull-requests）；id-token 供 pnpm 走
+# OIDC Trusted Publishing 发布 npm（免 NPM_TOKEN）
 permissions:
   contents: write
   pull-requests: write
+  id-token: write
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 

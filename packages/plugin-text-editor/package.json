@@ -1,6 +1,6 @@
 {
   "name": "@silkor/plugin-text-editor",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "silkor 官方文本编辑插件：画布内文本编辑会话与 IME 支持",
   "keywords": [
     "canvas",

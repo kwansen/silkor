@@ -1,6 +1,6 @@
 {
   "name": "@silkor/preset",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "silkor 官方插件预设：一键装配全部官方能力插件，官方插件清单的单一事实来源",
   "keywords": [
     "canvas",

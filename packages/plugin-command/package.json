@@ -1,6 +1,6 @@
 {
   "name": "@silkor/plugin-command",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "silkor 官方命令插件：画布命令的注册、分发与执行",
   "keywords": [
     "canvas",

@@ -1,6 +1,6 @@
 {
   "name": "@silkor/plugin-exporter",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "silkor 官方导出插件：画布内容导出（图片等格式）",
   "keywords": [
     "canvas",

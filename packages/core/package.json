@@ -1,6 +1,6 @@
 {
   "name": "@silkor/core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "silkor 画布内核：场景树、相机、渲染调度、插件生命周期与能力契约",
   "keywords": [
     "canvas",

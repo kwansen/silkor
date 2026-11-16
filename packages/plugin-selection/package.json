@@ -1,6 +1,6 @@
 {
   "name": "@silkor/plugin-selection",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "silkor 官方选择插件：点选、框选与多选能力",
   "keywords": [
     "canvas",
